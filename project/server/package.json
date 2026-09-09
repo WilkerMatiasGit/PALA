@@ -1,0 +1,11 @@
+{
+  "name": "dlab-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Backend DLab — Express + JSON persistido (contrato espelho do schema Prisma/AGENTS.md).",
+  "scripts": {
+    "dev": "node src/index.js",
+    "start": "node src/index.js"
+  }
+}
