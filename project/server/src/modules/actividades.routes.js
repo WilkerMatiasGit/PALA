@@ -1,138 +1,194 @@
 import { Router } from 'express';
-import { getDb, genId, persist } from '../db.js';
+import { prisma } from '../db.js';
 import { authRequired, rbac } from '../middleware/auth.js';
+import {
+  toActividadeGet,
+  toAulaGet,
+  toVisitaGet,
+  toProjectoGet,
+  toEstagioGet,
+  toActividadeTecnicoGet,
+  toActividadeMaterialGet,
+  toAgendamentoGet,
+} from '../utils/dto.js';
 
 const router = Router();
 router.use(authRequired);
 const ACT_ROLES = ['admin', 'professor', 'coordenador_dlab', 'supervisor', 'chefe_departamento'];
 
+const actInclude = { utilizador: true, laboratorio: true };
+
 // ---- CRUD Actividades ----
 
 // GET /actividades — listar (filtros tipo, estado, lab)
-router.get('/', (req, res) => {
-  const db = getDb();
-  let result = db.actividades.filter((x) => x.activo !== false);
-  if (req.query.tipo) result = result.filter((a) => a.tipo === req.query.tipo);
-  if (req.query.estado) result = result.filter((a) => a.estado === req.query.estado);
-  if (req.query.laboratorio_id) result = result.filter((a) => a.laboratorio_id === Number(req.query.laboratorio_id));
-  res.json(result);
+router.get('/', async (req, res, next) => {
+  try {
+    const where = { activo: true };
+    if (req.query.tipo) where.tipo = req.query.tipo;
+    if (req.query.estado) where.estado = req.query.estado;
+    if (req.query.laboratorio_id) where.laboratorio_id = Number(req.query.laboratorio_id);
+    const rows = await prisma.actividade.findMany({ where, include: actInclude, orderBy: { id: 'asc' } });
+    res.json(rows.map(toActividadeGet));
+  } catch (err) {
+    next(err);
+  }
 });
 
 // GET /actividades/:id
-router.get('/:id', (req, res) => {
-  const db = getDb();
-  const a = db.actividades.find((x) => x.id === Number(req.params.id) && x.activo !== false);
-  if (!a) return res.status(404).json({ message: 'Atividade não encontrada' });
-  res.json(a);
+router.get('/:id', async (req, res, next) => {
+  try {
+    const a = await prisma.actividade.findFirst({ where: { id: Number(req.params.id), activo: true }, include: actInclude });
+    if (!a) return res.status(404).json({ message: 'Atividade não encontrada' });
+    res.json(toActividadeGet(a));
+  } catch (err) {
+    next(err);
+  }
 });
 
 // POST /actividades — criar
-router.post('/', rbac(...ACT_ROLES), (req, res) => {
-  const { nome, utilizador_id, laboratorio_id, num_participantes, observacoes, precisa_assistente, tipo } = req.body || {};
-  if (!nome || !laboratorio_id || !tipo) {
-    return res.status(400).json({ message: 'nome, laboratorio_id e tipo são obrigatórios' });
+router.post('/', rbac(...ACT_ROLES), async (req, res, next) => {
+  try {
+    const { nome, utilizador_id, laboratorio_id, num_participantes, observacoes, precisa_assistente, tipo } = req.body || {};
+    if (!nome || !laboratorio_id || !tipo) {
+      return res.status(400).json({ message: 'nome, laboratorio_id e tipo são obrigatórios' });
+    }
+    const novo = await prisma.actividade.create({
+      data: {
+        nome,
+        utilizador_id: Number(utilizador_id || req.user.id),
+        laboratorio_id: Number(laboratorio_id),
+        tipo,
+        estado: 'pendente',
+        num_participantes: num_participantes ?? 1,
+        precisa_assistente: !!precisa_assistente,
+        observacoes: observacoes || '',
+      },
+      include: actInclude,
+    });
+    res.status(201).json(toActividadeGet(novo));
+  } catch (err) {
+    next(err);
   }
-  const db = getDb();
-  const user = db.utilizadores.find((u) => u.id === Number(utilizador_id || req.user.id));
-  const lab = db.laboratorios.find((l) => l.id === Number(laboratorio_id));
-  const now = new Date().toISOString();
-  const novo = {
-    id: genId(),
-    nome,
-    utilizador_id: Number(utilizador_id || req.user.id),
-    utilizador_nome: user?.nome ?? req.user.nome,
-    laboratorio_id: Number(laboratorio_id),
-    laboratorio_nome: lab?.nome ?? '',
-    tipo,
-    estado: 'pendente',
-    num_participantes: num_participantes ?? 1,
-    precisa_assistente: !!precisa_assistente,
-    observacoes: observacoes || '',
-    activo: true,
-    criado_em: now,
-    actualizado_em: now,
-  };
-  db.actividades.push(novo);
-  persist();
-  res.status(201).json(novo);
 });
 
 // PUT /actividades/:id
-router.put('/:id', rbac(...ACT_ROLES), (req, res) => {
-  const db = getDb();
-  const a = db.actividades.find((x) => x.id === Number(req.params.id));
-  if (!a) return res.status(404).json({ message: 'Atividade não encontrada' });
-  const { nome, utilizador_id, laboratorio_id, num_participantes, observacoes, precisa_assistente, tipo } = req.body || {};
-  if (nome !== undefined) a.nome = nome;
-  if (utilizador_id !== undefined) {
-    a.utilizador_id = Number(utilizador_id);
-    const u = db.utilizadores.find((x) => x.id === Number(utilizador_id));
-    a.utilizador_nome = u?.nome ?? '';
+router.put('/:id', rbac(...ACT_ROLES), async (req, res, next) => {
+  try {
+    const a = await prisma.actividade.findUnique({ where: { id: Number(req.params.id) } });
+    if (!a) return res.status(404).json({ message: 'Atividade não encontrada' });
+    const { nome, utilizador_id, laboratorio_id, num_participantes, observacoes, precisa_assistente, tipo } = req.body || {};
+    const data = {};
+    if (nome !== undefined) data.nome = nome;
+    if (utilizador_id !== undefined) data.utilizador_id = Number(utilizador_id);
+    if (laboratorio_id !== undefined) data.laboratorio_id = Number(laboratorio_id);
+    if (num_participantes !== undefined) data.num_participantes = num_participantes;
+    if (observacoes !== undefined) data.observacoes = observacoes;
+    if (precisa_assistente !== undefined) data.precisa_assistente = !!precisa_assistente;
+    if (tipo !== undefined) data.tipo = tipo;
+    const atualizado = await prisma.actividade.update({ where: { id: a.id }, data, include: actInclude });
+    res.json(toActividadeGet(atualizado));
+  } catch (err) {
+    next(err);
   }
-  if (laboratorio_id !== undefined) {
-    a.laboratorio_id = Number(laboratorio_id);
-    const l = db.laboratorios.find((x) => x.id === Number(laboratorio_id));
-    a.laboratorio_nome = l?.nome ?? '';
-  }
-  if (num_participantes !== undefined) a.num_participantes = num_participantes;
-  if (observacoes !== undefined) a.observacoes = observacoes;
-  if (precisa_assistente !== undefined) a.precisa_assistente = !!precisa_assistente;
-  if (tipo !== undefined) a.tipo = tipo;
-  a.actualizado_em = new Date().toISOString();
-  persist();
-  res.json(a);
 });
 
 // DELETE /actividades/:id — soft
-router.delete('/:id', rbac(...ACT_ROLES), (req, res) => {
-  const db = getDb();
-  const a = db.actividades.find((x) => x.id === Number(req.params.id));
-  if (!a) return res.status(404).json({ message: 'Atividade não encontrada' });
-  a.activo = false;
-  persist();
-  res.json({ message: 'Atividade removida' });
+router.delete('/:id', rbac(...ACT_ROLES), async (req, res, next) => {
+  try {
+    const a = await prisma.actividade.findUnique({ where: { id: Number(req.params.id) } });
+    if (!a) return res.status(404).json({ message: 'Atividade não encontrada' });
+    await prisma.actividade.update({ where: { id: a.id }, data: { activo: false } });
+    res.json({ message: 'Atividade removida' });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // ---- Sub-recursos por atividade ----
 
 // GET /actividades/:id/aula
-router.get('/:id/aula', (req, res) => {
-  const db = getDb();
-  const a = db.aulas.find((x) => x.actividade_id === Number(req.params.id) && x.activo !== false);
-  res.json(a || null);
+router.get('/:id/aula', async (req, res, next) => {
+  try {
+    const a = await prisma.aula.findFirst({
+      where: { actividade_id: Number(req.params.id), activo: true },
+      include: { curso_disciplina: { include: { curso: true, disciplina: true } } },
+    });
+    res.json(a ? toAulaGet(a) : null);
+  } catch (err) {
+    next(err);
+  }
 });
 // GET /actividades/:id/visita
-router.get('/:id/visita', (req, res) => {
-  const db = getDb();
-  const v = db.visitas.find((x) => x.actividade_id === Number(req.params.id) && x.activo !== false);
-  res.json(v || null);
+router.get('/:id/visita', async (req, res, next) => {
+  try {
+    const v = await prisma.visita.findFirst({ where: { actividade_id: Number(req.params.id), activo: true } });
+    res.json(v ? toVisitaGet(v) : null);
+  } catch (err) {
+    next(err);
+  }
 });
 // GET /actividades/:id/projecto
-router.get('/:id/projecto', (req, res) => {
-  const db = getDb();
-  const p = db.projectos.find((x) => x.actividade_id === Number(req.params.id) && x.activo !== false);
-  res.json(p || null);
+router.get('/:id/projecto', async (req, res, next) => {
+  try {
+    const p = await prisma.projecto.findFirst({
+      where: { actividade_id: Number(req.params.id), activo: true },
+      include: { responsavel: true },
+    });
+    res.json(p ? toProjectoGet(p) : null);
+  } catch (err) {
+    next(err);
+  }
 });
 // GET /actividades/:id/estagio
-router.get('/:id/estagio', (req, res) => {
-  const db = getDb();
-  const e = db.estagios.find((x) => x.actividade_id === Number(req.params.id) && x.activo !== false);
-  res.json(e || null);
+router.get('/:id/estagio', async (req, res, next) => {
+  try {
+    const e = await prisma.estagio.findFirst({
+      where: { actividade_id: Number(req.params.id), activo: true },
+      include: { responsavel: true, estudante: true },
+    });
+    res.json(e ? toEstagioGet(e) : null);
+  } catch (err) {
+    next(err);
+  }
 });
 // GET /actividades/:id/tecnicos
-router.get('/:id/tecnicos', (req, res) => {
-  const db = getDb();
-  res.json(db.actividadeTecnicos.filter((t) => t.actividade_id === Number(req.params.id) && t.activo !== false));
+router.get('/:id/tecnicos', async (req, res, next) => {
+  try {
+    const rows = await prisma.actividadeTecnico.findMany({
+      where: { actividade_id: Number(req.params.id), activo: true },
+      include: { utilizador: true },
+      orderBy: { id: 'asc' },
+    });
+    res.json(rows.map(toActividadeTecnicoGet));
+  } catch (err) {
+    next(err);
+  }
 });
 // GET /actividades/:id/materiais
-router.get('/:id/materiais', (req, res) => {
-  const db = getDb();
-  res.json(db.actividadeMateriais.filter((m) => m.actividade_id === Number(req.params.id) && m.activo !== false));
+router.get('/:id/materiais', async (req, res, next) => {
+  try {
+    const rows = await prisma.actividadeMaterial.findMany({
+      where: { actividade_id: Number(req.params.id), activo: true },
+      include: { material: true },
+      orderBy: { id: 'asc' },
+    });
+    res.json(rows.map(toActividadeMaterialGet));
+  } catch (err) {
+    next(err);
+  }
 });
 // GET /actividades/:id/agendamentos
-router.get('/:id/agendamentos', (req, res) => {
-  const db = getDb();
-  res.json(db.agendamentos.filter((g) => g.actividade_id === Number(req.params.id) && g.activo !== false));
+router.get('/:id/agendamentos', async (req, res, next) => {
+  try {
+    const rows = await prisma.agendamento.findMany({
+      where: { actividade_id: Number(req.params.id), activo: true },
+      include: { actividade: { include: { laboratorio: true } } },
+      orderBy: { id: 'asc' },
+    });
+    res.json(rows.map(toAgendamentoGet));
+  } catch (err) {
+    next(err);
+  }
 });
 
 export default router;
