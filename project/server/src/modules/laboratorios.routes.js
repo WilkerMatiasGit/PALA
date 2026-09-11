@@ -33,7 +33,7 @@ router.post('/', rbac('admin'), async (req, res, next) => {
     const { nome, tipo, descricao } = req.body || {};
     if (!nome || !tipo) return res.status(400).json({ message: 'nome e tipo são obrigatórios' });
     const existing = await prisma.laboratorio.findFirst({
-      where: { activo: true, nome: { equals: String(nome).trim(), mode: 'insensitive' } },
+      where: { activo: true, nome: String(nome).trim() },
     });
     if (existing) {
       return res.status(409).json({ message: 'Já existe um laboratório com este nome' });
@@ -55,7 +55,7 @@ router.put('/:id', rbac('admin'), async (req, res, next) => {
     const { nome, tipo, descricao } = req.body || {};
     if (nome !== undefined) {
       const dup = await prisma.laboratorio.findFirst({
-        where: { activo: true, id: { not: l.id }, nome: { equals: String(nome).trim(), mode: 'insensitive' } },
+        where: { activo: true, id: { not: l.id }, nome: String(nome).trim() },
       });
       if (dup) return res.status(409).json({ message: 'Já existe um laboratório com este nome' });
     }

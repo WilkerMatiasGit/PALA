@@ -103,7 +103,7 @@ router.post('/', rbac('admin', 'tecnico', 'coordenador_dlab', 'supervisor', 'che
     const lab = await prisma.laboratorio.findUnique({ where: { id: Number(laboratorio_id) } });
     if (!lab) return res.status(404).json({ message: 'Laboratório não encontrado' });
     const dup = await prisma.material.findFirst({
-      where: { activo: true, laboratorio_id: Number(laboratorio_id), nome: { equals: String(nome).trim(), mode: 'insensitive' } },
+      where: { activo: true, laboratorio_id: Number(laboratorio_id), nome: String(nome).trim() },
     });
     if (dup) return res.status(409).json({ message: 'Já existe um material com este nome neste laboratório' });
 
@@ -147,7 +147,7 @@ router.put('/:id', rbac('admin', 'tecnico', 'coordenador_dlab', 'supervisor', 'c
     const { nome, categoria, quantidade_minima, unidade, estado } = req.body || {};
     if (nome !== undefined) {
       const dup = await prisma.material.findFirst({
-        where: { activo: true, id: { not: m.id }, laboratorio_id: m.laboratorio_id, nome: { equals: String(nome).trim(), mode: 'insensitive' } },
+        where: { activo: true, id: { not: m.id }, laboratorio_id: m.laboratorio_id, nome: String(nome).trim() },
       });
       if (dup) return res.status(409).json({ message: 'Já existe um material com este nome neste laboratório' });
     }

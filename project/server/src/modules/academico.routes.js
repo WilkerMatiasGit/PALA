@@ -21,7 +21,7 @@ disciplinas.post('/', rbac('admin'), async (req, res, next) => {
     const { nome } = req.body || {};
     if (!nome) return res.status(400).json({ message: 'nome é obrigatório' });
     const dup = await prisma.disciplina.findFirst({
-      where: { activo: true, nome: { equals: String(nome).trim(), mode: 'insensitive' } },
+      where: { activo: true, nome: String(nome).trim() },
     });
     if (dup) return res.status(409).json({ message: 'Já existe uma disciplina com este nome' });
     const nova = await prisma.disciplina.create({ data: { nome } });
