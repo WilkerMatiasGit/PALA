@@ -43,12 +43,13 @@ app.use('/agendamentos', agendamentosRouter);
 app.use('/aprovacoes', aprovacoesFilaRouter);
 app.use('/relatorios', relatoriosRouter);
 
-// Calendário (RF12) — ocupação mensal só aprovado_supervisor
+// Calendário (RF12) — ocupação mensal só de agendamentos aprovado_supervisor
 app.get('/calendario', authRequired, async (req, res, next) => {
   try {
     const where = {
       activo: true,
-      actividade: { estado: 'aprovado_supervisor', activo: true },
+      estado: 'aprovado_supervisor',
+      actividade: { activo: true },
     };
     if (req.query.laboratorio_id) where.actividade.laboratorio_id = Number(req.query.laboratorio_id);
     if (req.query.mes && req.query.ano) {
@@ -73,6 +74,7 @@ app.get('/calendario', authRequired, async (req, res, next) => {
         confirmado_professor_em: g.confirmado_professor_em,
         confirmado_tecnico_em: g.confirmado_tecnico_em,
         realizado: g.realizado,
+        estado: g.estado,
         criado_em: g.criado_em,
         actualizado_em: g.actualizado_em,
       }))

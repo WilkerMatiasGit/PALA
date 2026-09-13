@@ -38,8 +38,8 @@ export default function Dashboard() {
 
   useEffect(() => { load(); }, []);
 
-  const pendentes = actividades.filter((a) => a.estado === 'pendente' || a.estado === 'aprovado_dlab').length;
-  const aprovadas = actividades.filter((a) => a.estado === 'aprovado_supervisor').length;
+  const pendentes = actividades.filter((a) => a.estado === 'pendente' || a.estado === 'revisado_dlab').length;
+  const aprovadas = actividades.filter((a) => a.estado === 'revisado_supervisor').length;
   const stockAlerts = materiais.filter((m) => m.quantidade <= m.quantidade_minima).length;
   const hoje = agendamentos.filter((a) => {
     const d = new Date(a.hora_inicio);

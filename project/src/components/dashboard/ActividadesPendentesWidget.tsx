@@ -9,7 +9,7 @@ import { ClipboardList, ChevronRight } from 'lucide-react';
 export function ActividadesPendentesWidget({ actividades, loading }: { actividades: ActividadeGet[]; loading: boolean }) {
   const navigate = useNavigate();
   const pendentes = actividades.filter(
-    (a) => a.estado === 'pendente' || a.estado === 'aprovado_dlab'
+    (a) => a.estado === 'pendente' || a.estado === 'revisado_dlab'
   ).slice(0, 5);
 
   return (

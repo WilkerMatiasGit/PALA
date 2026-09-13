@@ -47,6 +47,14 @@ enum ActividadeTipo {
 
 enum ActividadeEstado {
   pendente
+  revisado_dlab
+  revisado_supervisor
+  rejeitado
+}
+
+enum AgendamentoEstado {
+  nao_revisto // ainda não revisto pela etapa atual
+  pendente // deixado pendente deliberadamente (DLab adiou a decisão)
   aprovado_dlab
   aprovado_supervisor
   rejeitado
@@ -246,9 +254,9 @@ model Actividade {
   utilizador         Utilizador     @relation(fields: [utilizador_id], references: [id])
   laboratorio        Laboratorio    @relation(fields: [laboratorio_id], references: [id])
   agendamentos       Agendamento[]
+  aprovacoes         Aprovacao[]
   atividadeMateriais ActividadeMaterial[]
   atividadeTecnicos  ActividadeTecnico[]
-  aprovacoes         Aprovacao[]
   aula               Aula?
   visita             Visita?
   projecto           Projecto?
@@ -292,7 +300,8 @@ model ActividadeMaterial {
 
 model Aprovacao {
   id           Int             @id @default(autoincrement())
-  actividade_id Int
+  agendamento_id Int?          // NULL em decisões ao nível da atividade (conclusão/rejeição)
+  actividade_id Int?           // atividade à qual a decisão se refere (preenchida sempre)
   aprovador_id Int
   etapa        AprovacaoEtapa
   decisao      AprovacaoDecisao
@@ -302,25 +311,28 @@ model Aprovacao {
   actualizado_em DateTime      @updatedAt
   activo       Boolean         @default(true)
 
-  actividade Actividade @relation(fields: [actividade_id], references: [id])
-  aprovador  Utilizador @relation(fields: [aprovador_id], references: [id])
+  agendamento Agendamento? @relation(fields: [agendamento_id], references: [id])
+  actividade  Actividade?  @relation(fields: [actividade_id], references: [id])
+  aprovador   Utilizador   @relation(fields: [aprovador_id], references: [id])
 
   @@map("aprovacoes")
 }
 
 model Agendamento {
-  id                   Int      @id @default(autoincrement())
+  id                   Int              @id @default(autoincrement())
   actividade_id        Int
   hora_inicio          DateTime
   hora_fim             DateTime
   confirmado_professor_em DateTime?
   confirmado_tecnico_em   DateTime?
-  realizado            Boolean  @default(false)
-  criado_em            DateTime @default(now())
-  actualizado_em       DateTime @updatedAt
-  activo               Boolean  @default(true)
+  realizado            Boolean          @default(false)
+  estado               AgendamentoEstado @default(nao_revisto)
+  criado_em            DateTime         @default(now())
+  actualizado_em       DateTime         @updatedAt
+  activo               Boolean          @default(true)
 
   actividade Actividade @relation(fields: [actividade_id], references: [id])
+  aprovacoes Aprovacao[]
 
   @@map("agendamentos")
 }

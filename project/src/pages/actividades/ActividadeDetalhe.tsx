@@ -12,7 +12,7 @@ import { ErrorState } from '@/components/ui/error-state';
 import { actividadesService } from '@/services/actividades.service';
 import { agendamentosService } from '@/services/agendamentos.service';
 import { aprovacoesService } from '@/services/aprovacoes.service';
-import { formatEstado, formatTipo, formatDecisao, formatPapel } from '@/utils/formatEstado';
+import { formatEstado, formatTipo, formatDecisao, formatPapel, formatAgendamentoEstado } from '@/utils/formatEstado';
 import { formatDate, formatDateTime } from '@/utils/formatDate';
 import { useAuth } from '@/context/AuthContext';
 import { hasRole } from '@/utils/roleGuard';
@@ -157,7 +157,10 @@ export default function ActividadeDetalhe() {
               <EmptyState icon={Circle} title="Sem agendamentos" />
             ) : (
               <div className="space-y-2">
-                {agendamentos.map((ag) => (
+                {agendamentos.map((ag) => {
+                  const agEst = formatAgendamentoEstado(ag.estado);
+                  const aprovado = ag.estado === 'aprovado_supervisor';
+                  return (
                   <div key={ag.id} className="flex items-center justify-between rounded-lg border p-3">
                     <div>
                       <p className="text-sm font-medium">{formatDate(ag.hora_inicio)}</p>
@@ -166,7 +169,7 @@ export default function ActividadeDetalhe() {
                     <div className="flex items-center gap-2">
                       {ag.realizado ? (
                         <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200"><CheckCircle2 className="mr-1 h-3 w-3" /> Realizado</Badge>
-                      ) : (
+                      ) : aprovado ? (
                         <>
                           {ag.confirmado_professor_em ? (
                             <Badge className="bg-blue-100 text-blue-800 border-blue-200"><CheckCircle2 className="mr-1 h-3 w-3" /> Prof ✓</Badge>
@@ -183,10 +186,13 @@ export default function ActividadeDetalhe() {
                             <Badge variant="outline"><Circle className="mr-1 h-3 w-3" /> Técn ☐</Badge>
                           )}
                         </>
+                      ) : (
+                        <Badge variant="outline" className={agEst.className}>{agEst.label}</Badge>
                       )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>

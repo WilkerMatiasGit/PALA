@@ -54,8 +54,8 @@ export function UtilizadorUpsertModal({ open, onOpenChange, utilizador, onSaved 
       }
       onSaved();
       onOpenChange(false);
-    } catch {
-      toast.error('Erro ao guardar utilizador');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao guardar utilizador');
     } finally {
       setSaving(false);
     }

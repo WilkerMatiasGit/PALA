@@ -15,7 +15,8 @@ router.get('/', async (req, res, next) => {
   try {
     const where = {
       activo: true,
-      actividade: { estado: 'aprovado_supervisor', activo: true },
+      estado: 'aprovado_supervisor',
+      actividade: { activo: true },
     };
     if (req.query.laboratorio_id) where.actividade.laboratorio_id = Number(req.query.laboratorio_id);
     if (req.query.mes && req.query.ano) {
@@ -44,8 +45,8 @@ router.put('/:id/confirmar-professor', rbac('admin', 'professor'), async (req, r
       include: { actividade: { select: { estado: true } } },
     });
     if (!ag || !ag.activo) return res.status(404).json({ message: 'Agendamento não encontrado' });
-    if (ag.actividade.estado !== 'aprovado_supervisor') {
-      return res.status(409).json({ message: 'A atividade ainda não foi aprovada pelo Supervisor; só pode ser concluída após a aprovação final.' });
+    if (ag.estado !== 'aprovado_supervisor') {
+      return res.status(409).json({ message: 'O agendamento ainda não foi aprovado pelo Supervisor; só pode ser concluído após a aprovação final.' });
     }
     const atualizado = await prisma.agendamento.update({
       where: { id: ag.id },
@@ -66,8 +67,8 @@ router.put('/:id/confirmar-tecnico', rbac('tecnico', 'admin'), async (req, res, 
       include: { actividade: { select: { estado: true } } },
     });
     if (!ag || !ag.activo) return res.status(404).json({ message: 'Agendamento não encontrado' });
-    if (ag.actividade.estado !== 'aprovado_supervisor') {
-      return res.status(409).json({ message: 'A atividade ainda não foi aprovada pelo Supervisor; só pode ser concluída após a aprovação final.' });
+    if (ag.estado !== 'aprovado_supervisor') {
+      return res.status(409).json({ message: 'O agendamento ainda não foi aprovado pelo Supervisor; só pode ser concluído após a aprovação final.' });
     }
 
     const jaRealizada = ag.realizado;
@@ -123,11 +124,12 @@ router.post('/', rbac(...MOVE_ROLES), async (req, res, next) => {
     const end = new Date(hora_fim).getTime();
     if (start >= end) return res.status(400).json({ message: 'hora_fim deve ser posterior a hora_inicio' });
 
-    // RF13: bloquear choque com agendamentos de atividades aprovado_supervisor no mesmo lab
+    // RF13: bloquear choque com agendamentos aprovado_supervisor no mesmo lab
     const aprovados = await prisma.agendamento.findMany({
       where: {
         activo: true,
-        actividade: { estado: 'aprovado_supervisor', laboratorio_id: act.laboratorio_id },
+        estado: 'aprovado_supervisor',
+        actividade: { laboratorio_id: act.laboratorio_id },
       },
       select: { hora_inicio: true, hora_fim: true },
     });

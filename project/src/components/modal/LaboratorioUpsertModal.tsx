@@ -54,8 +54,8 @@ export function LaboratorioUpsertModal({ open, onOpenChange, laboratorio, onSave
       }
       onSaved();
       onOpenChange(false);
-    } catch {
-      toast.error('Erro ao guardar laboratório');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao guardar laboratório');
     } finally {
       setSaving(false);
     }

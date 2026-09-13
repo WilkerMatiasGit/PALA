@@ -18,7 +18,7 @@ import { cursosService } from '@/services/cursos.service';
 import { materiaisService } from '@/services/materiais.service';
 import { agendamentosService } from '@/services/agendamentos.service';
 import { ACTIVIDADE_TIPO_OPTIONS } from '@/services/enums';
-import type { ActividadeGet, ActividadeUpsert } from '@/types/actividade.types';
+import type { ActividadeGet, ActividadeUpsert, ActividadeFullUpsert } from '@/types/actividade.types';
 import type { LaboratorioGet } from '@/types/laboratorio.types';
 import type { UtilizadorGet } from '@/types/utilizador.types';
 import type { CursoDisciplinaGet } from '@/types/disciplina.types';
@@ -220,49 +220,37 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
         precisa_assistente: precisaAssistente,
         tipo,
       };
-      let actId: number;
+
+      const detalhes =
+        tipo === 'aula'
+          ? { curso_disciplina_id: Number(cursoDisciplinaId), tema }
+          : tipo === 'visita'
+            ? { nome_visitante: nomeVisitante, telefone, email: emailVisitante, ...(instituicao ? { instituicao } : {}) }
+            : tipo === 'projecto'
+              ? { responsavel_id: Number(responsavelId), titulo, descricao, data_inicio: dataInicio, data_fim: dataFim }
+              : { responsavel_id: Number(responsavelId), estudante_id: Number(estudanteId), data_inicio: dataInicio, data_fim: dataFim };
+
+      const payload: ActividadeFullUpsert = {
+        ...actData,
+        detalhes,
+        agendamentos: agendamentos
+          .filter((a) => a.data && a.hora_inicio && a.hora_fim)
+          .map((a) => ({ hora_inicio: `${a.data}T${a.hora_inicio}`, hora_fim: `${a.data}T${a.hora_fim}` })),
+        materiais: materialReqs.map((m) => ({ material_id: m.material_id, quantidade_estimada: m.quantidade_estimada })),
+      };
+
+      // Envio único (atómico no backend): atividade + detalhes + agendamentos + materiais
       if (actividade) {
-        await actividadesService.update(actividade.id, actData);
-        actId = actividade.id;
+        await actividadesService.updateFull(actividade.id, payload);
       } else {
-        const created = await actividadesService.create(actData);
-        actId = created.id;
-      }
-
-      // Type-specific
-      if (tipo === 'aula' && cursoDisciplinaId) {
-        await actividadesService.upsertAula({ actividade_id: actId, curso_disciplina_id: Number(cursoDisciplinaId), tema });
-      } else if (tipo === 'visita') {
-        await actividadesService.upsertVisita({ actividade_id: actId, nome_visitante: nomeVisitante, instituicao, telefone, email: emailVisitante });
-      } else if (tipo === 'projecto') {
-        await actividadesService.upsertProjecto({ actividade_id: actId, responsavel_id: Number(responsavelId), titulo, descricao, data_inicio: dataInicio, data_fim: dataFim });
-      } else if (tipo === 'estagio') {
-        await actividadesService.upsertEstagio({ actividade_id: actId, responsavel_id: Number(responsavelId), estudante_id: Number(estudanteId), data_inicio: dataInicio, data_fim: dataFim });
-      }
-
-      // Agendamentos
-      const validAgends = agendamentos.filter((a) => a.data && a.hora_inicio && a.hora_fim);
-      // Item 3: ao editar, remover os agendamentos anteriores para evitar órfãos
-      if (actividade) {
-        const existing = await agendamentosService.listByActividade(actId);
-        for (const old of existing) {
-          await agendamentosService.remove(old.id);
-        }
-      }
-      for (const a of validAgends) {
-        await agendamentosService.create({ actividade_id: actId, hora_inicio: `${a.data}T${a.hora_inicio}`, hora_fim: `${a.data}T${a.hora_fim}` });
-      }
-
-      // Materiais
-      for (const m of materialReqs) {
-        await actividadesService.addMaterial({ actividade_id: actId, material_id: m.material_id, quantidade_estimada: m.quantidade_estimada });
+        await actividadesService.createFull(payload);
       }
 
       toast.success(actividade ? 'Actividade atualizada' : 'Actividade criada');
       onSaved();
       onOpenChange(false);
-    } catch {
-      toast.error('Erro ao guardar actividade');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao guardar actividade');
     } finally {
       setSaving(false);
     }

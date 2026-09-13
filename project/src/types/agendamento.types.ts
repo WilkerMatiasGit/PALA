@@ -1,3 +1,5 @@
+import type { AgendamentoEstado } from '@/services/enums';
+
 export interface AgendamentoGet {
   id: number;
   actividade_id: number;
@@ -9,6 +11,7 @@ export interface AgendamentoGet {
   confirmado_professor_em: string | null;
   confirmado_tecnico_em: string | null;
   realizado: boolean;
+  estado: AgendamentoEstado;
   criado_em: string;
   actualizado_em: string;
 }

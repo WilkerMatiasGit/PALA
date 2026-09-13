@@ -30,6 +30,18 @@ export interface ActividadeUpsert {
   tipo: ActividadeTipo;
 }
 
+export type ActividadeDetalhesPayload =
+  | { curso_disciplina_id: number; tema: string }
+  | { nome_visitante: string; instituicao?: string; telefone: string; email: string }
+  | { responsavel_id: number; titulo: string; descricao: string; data_inicio: string; data_fim: string }
+  | { responsavel_id: number; estudante_id: number; data_inicio: string; data_fim: string };
+
+export interface ActividadeFullUpsert extends ActividadeUpsert {
+  detalhes?: ActividadeDetalhesPayload;
+  agendamentos?: { hora_inicio: string; hora_fim: string }[];
+  materiais?: { material_id: number; quantidade_estimada: number }[];
+}
+
 export interface AulaGet {
   id: number;
   actividade_id: number;

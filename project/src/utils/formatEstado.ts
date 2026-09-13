@@ -1,6 +1,7 @@
 import type {
   ActividadeEstado,
   ActividadeTipo,
+  AgendamentoEstado,
   AprovacaoDecisao,
   AprovacaoEtapa,
   MaterialEstado,
@@ -10,6 +11,7 @@ import type {
 import {
   ACTIVIDADE_ESTADO_LABELS,
   ACTIVIDADE_TIPO_LABELS,
+  AGENDAMENTO_ESTADO_LABELS,
   APROVACAO_DECISAO_LABELS,
   APROVACAO_ETAPA_LABELS,
   MATERIAL_ESTADO_LABELS,
@@ -28,16 +30,42 @@ export function formatEstado(estado: ActividadeEstado): EstadoConfig {
       label: ACTIVIDADE_ESTADO_LABELS[estado],
       className: 'bg-amber-100 text-amber-800 border-amber-200',
     },
-    aprovado_dlab: {
+    revisado_dlab: {
       label: ACTIVIDADE_ESTADO_LABELS[estado],
       className: 'bg-blue-100 text-blue-800 border-blue-200',
     },
-    aprovado_supervisor: {
+    revisado_supervisor: {
       label: ACTIVIDADE_ESTADO_LABELS[estado],
       className: 'bg-emerald-100 text-emerald-800 border-emerald-200',
     },
     rejeitado: {
       label: ACTIVIDADE_ESTADO_LABELS[estado],
+      className: 'bg-red-100 text-red-800 border-red-200',
+    },
+  };
+  return configs[estado];
+}
+
+export function formatAgendamentoEstado(estado: AgendamentoEstado): EstadoConfig {
+  const configs: Record<AgendamentoEstado, EstadoConfig> = {
+    nao_revisto: {
+      label: AGENDAMENTO_ESTADO_LABELS[estado],
+      className: 'bg-slate-100 text-slate-700 border-slate-200',
+    },
+    pendente: {
+      label: AGENDAMENTO_ESTADO_LABELS[estado],
+      className: 'bg-amber-100 text-amber-800 border-amber-200',
+    },
+    aprovado_dlab: {
+      label: AGENDAMENTO_ESTADO_LABELS[estado],
+      className: 'bg-blue-100 text-blue-800 border-blue-200',
+    },
+    aprovado_supervisor: {
+      label: AGENDAMENTO_ESTADO_LABELS[estado],
+      className: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+    },
+    rejeitado: {
+      label: AGENDAMENTO_ESTADO_LABELS[estado],
       className: 'bg-red-100 text-red-800 border-red-200',
     },
   };

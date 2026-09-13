@@ -2,6 +2,7 @@ import { api, apiErrorMessage } from './api';
 import type {
   ActividadeGet,
   ActividadeUpsert,
+  ActividadeFullUpsert,
   AulaGet,
   AulaUpsert,
   VisitaGet,
@@ -49,6 +50,25 @@ export const actividadesService = {
   async update(id: number, data: ActividadeUpsert): Promise<ActividadeGet> {
     try {
       const { data: updated } = await api.put<ActividadeGet>(`/actividades/${id}`, data);
+      return updated;
+    } catch (err) {
+      throw new Error(apiErrorMessage(err));
+    }
+  },
+
+  // ---- Criação/edição atómica (atividade + detalhes + agendamentos + materiais) ----
+  async createFull(data: ActividadeFullUpsert): Promise<ActividadeGet> {
+    try {
+      const { data: created } = await api.post<ActividadeGet>('/actividades/full', data);
+      return created;
+    } catch (err) {
+      throw new Error(apiErrorMessage(err));
+    }
+  },
+
+  async updateFull(id: number, data: ActividadeFullUpsert): Promise<ActividadeGet> {
+    try {
+      const { data: updated } = await api.put<ActividadeGet>(`/actividades/${id}/full`, data);
       return updated;
     } catch (err) {
       throw new Error(apiErrorMessage(err));

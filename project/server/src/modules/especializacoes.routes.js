@@ -197,7 +197,7 @@ atividadeTecnico.post('/', async (req, res, next) => {
       return res.status(400).json({ message: 'actividade_id, utilizador_id e papel são obrigatórios' });
     }
     const result = await prisma.actividadeTecnico.upsert({
-      where: { atividade_id_papel: { actividade_id: Number(actividade_id), papel } },
+      where: { actividade_id_papel: { actividade_id: Number(actividade_id), papel } },
       update: { utilizador_id: Number(utilizador_id) },
       create: {
         actividade_id: Number(actividade_id),
@@ -237,8 +237,20 @@ atividadeMateriais.post('/', async (req, res, next) => {
     if (!actividade_id || !material_id || quantidade_estimada == null) {
       return res.status(400).json({ message: 'actividade_id, material_id e quantidade_estimada são obrigatórios' });
     }
+    const actv = await prisma.actividade.findUnique({ where: { id: Number(actividade_id) } });
+    if (!actv || !actv.activo) return res.status(404).json({ message: 'Atividade não encontrada' });
+    const mat = await prisma.material.findUnique({ where: { id: Number(material_id) } });
+    if (!mat || !mat.activo) return res.status(404).json({ message: 'Material não encontrado' });
+    if (mat.laboratorio_id !== actv.laboratorio_id) {
+      return res.status(400).json({ message: `O material '${mat.nome}' não pertence ao laboratório da atividade` });
+    }
+    const qtd = Number(quantidade_estimada) || 0;
+    if (qtd < 1) return res.status(400).json({ message: 'quantidade_estimada deve ser maior que zero' });
+    if (qtd > mat.quantidade) {
+      return res.status(400).json({ message: `Stock insuficiente para '${mat.nome}' (disponível: ${mat.quantidade} ${mat.unidade})` });
+    }
     const result = await prisma.actividadeMaterial.upsert({
-      where: { atividade_id_material_id: { actividade_id: Number(actividade_id), material_id: Number(material_id) } },
+      where: { actividade_id_material_id: { actividade_id: Number(actividade_id), material_id: Number(material_id) } },
       update: { quantidade_estimada: Number(quantidade_estimada) },
       create: {
         actividade_id: Number(actividade_id),

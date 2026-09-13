@@ -205,6 +205,7 @@ export function toAgendamentoGet(g) {
     confirmado_professor_em: g.confirmado_professor_em,
     confirmado_tecnico_em: g.confirmado_tecnico_em,
     realizado: g.realizado,
+    estado: g.estado,
     criado_em: g.criado_em,
     actualizado_em: g.actualizado_em,
   };
@@ -237,12 +238,14 @@ export function toActividadeMaterialGet(am) {
   };
 }
 
-// Recebe Aprovacao com include { aprovador, atividade }
+// Recebe Aprovacao com include { aprovador, agendamento: { atividade }, atividade }
 export function toAprovacaoGet(ap) {
+  const g = ap.agendamento;
   return {
     id: ap.id,
-    actividade_id: ap.actividade_id,
-    ...(ap.actividade ? { actividade_nome: ap.actividade.nome } : {}),
+    ...(ap.agendamento_id != null ? { agendamento_id: ap.agendamento_id } : {}),
+    ...(ap.actividade_id != null ? { actividade_id: ap.actividade_id } : g?.actividade_id != null ? { actividade_id: g.actividade_id } : {}),
+    ...(ap.actividade?.nome ? { actividade_nome: ap.actividade.nome } : g?.actividade?.nome ? { actividade_nome: g.actividade.nome } : {}),
     aprovador_id: ap.aprovador_id,
     aprovador_nome: ap.aprovador?.nome ?? '',
     etapa: ap.etapa,
