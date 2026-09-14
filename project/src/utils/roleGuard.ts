@@ -32,7 +32,22 @@ export const CAN_CRUD_ACTIVIDADES: UtilizadorTipo[] = [
 
 export const CAN_CRUD_ESTUDANTES: UtilizadorTipo[] = [
   'admin',
-  'professor',
+  'coordenador_dlab',
+  'supervisor',
+  'chefe_departamento',
+];
+
+export const CAN_READ_MATERIAIS: UtilizadorTipo[] = [
+  'admin',
+  'tecnico',
+  'coordenador_dlab',
+  'supervisor',
+  'chefe_departamento',
+];
+
+export const CAN_READ_LAB_DETALHE: UtilizadorTipo[] = [
+  'admin',
+  'tecnico',
   'coordenador_dlab',
   'supervisor',
   'chefe_departamento',
@@ -82,7 +97,7 @@ export const SIDEBAR_SECTIONS: {
   {
     label: 'Recursos',
     items: [
-      { label: 'Materiais', path: '/materiais', icon: 'Package', roles: ALL_ROLES },
+      { label: 'Materiais', path: '/materiais', icon: 'Package', roles: CAN_READ_MATERIAIS },
       { label: 'Histórico', path: '/materiais/historico', icon: 'History', roles: ['admin', 'tecnico', 'supervisor', 'chefe_departamento'] },
       { label: 'Relatórios', path: '/relatorios', icon: 'BarChart3', roles: ['admin', 'tecnico', 'coordenador_dlab', 'supervisor', 'chefe_departamento'] },
     ],

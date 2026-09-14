@@ -1,64 +1,85 @@
 import { Router } from 'express';
-import { getDb, genId, persist } from '../db.js';
+import { prisma } from '../db.js';
 import { authRequired, rbac } from '../middleware/auth.js';
+import { toLabGet } from '../utils/dto.js';
 
 const router = Router();
 router.use(authRequired);
 
 // GET /labs
-router.get('/', (req, res) => {
-  const db = getDb();
-  res.json(db.laboratorios.filter((x) => x.activo !== false));
+router.get('/', async (req, res, next) => {
+  try {
+    const labs = await prisma.laboratorio.findMany({ where: { activo: true }, orderBy: { id: 'asc' } });
+    res.json(labs.map(toLabGet));
+  } catch (err) {
+    next(err);
+  }
 });
 
-// GET /labs/:id
-router.get('/:id', (req, res) => {
-  const db = getDb();
-  const l = db.laboratorios.find((x) => x.id === Number(req.params.id) && x.activo !== false);
-  if (!l) return res.status(404).json({ message: 'Laboratório não encontrado' });
-  res.json(l);
+// GET /labs/:id — [A,T,C,S,CD] (professor vê só a lista, sem drill-down de materiais)
+router.get('/:id', rbac('admin', 'tecnico', 'coordenador_dlab', 'supervisor', 'chefe_departamento'), async (req, res, next) => {
+  try {
+    const l = await prisma.laboratorio.findFirst({ where: { id: Number(req.params.id), activo: true } });
+    if (!l) return res.status(404).json({ message: 'Laboratório não encontrado' });
+    res.json(toLabGet(l));
+  } catch (err) {
+    next(err);
+  }
 });
 
 // POST /labs — A
-router.post('/', rbac('admin'), (req, res) => {
-  const { nome, tipo, descricao } = req.body || {};
-  if (!nome || !tipo) return res.status(400).json({ message: 'nome e tipo são obrigatórios' });
-  const db = getDb();
-  if (db.laboratorios.some((l) => l.activo !== false && l.nome.toLowerCase() === String(nome).trim().toLowerCase())) {
-    return res.status(409).json({ message: 'Já existe um laboratório com este nome' });
+router.post('/', rbac('admin'), async (req, res, next) => {
+  try {
+    const { nome, tipo, descricao } = req.body || {};
+    if (!nome || !tipo) return res.status(400).json({ message: 'nome e tipo são obrigatórios' });
+    const existing = await prisma.laboratorio.findFirst({
+      where: { activo: true, nome: String(nome).trim() },
+    });
+    if (existing) {
+      return res.status(409).json({ message: 'Já existe um laboratório com este nome' });
+    }
+    const novo = await prisma.laboratorio.create({
+      data: { nome, tipo, descricao: descricao || '' },
+    });
+    res.status(201).json(toLabGet(novo));
+  } catch (err) {
+    next(err);
   }
-  const now = new Date().toISOString();
-  const novo = { id: genId(), nome, tipo, descricao: descricao || '', activo: true, criado_em: now, actualizado_em: now };
-  db.laboratorios.push(novo);
-  persist();
-  res.status(201).json(novo);
 });
 
 // PUT /labs/:id — A
-router.put('/:id', rbac('admin'), (req, res) => {
-  const db = getDb();
-  const l = db.laboratorios.find((x) => x.id === Number(req.params.id));
-  if (!l) return res.status(404).json({ message: 'Laboratório não encontrado' });
-  const { nome, tipo, descricao } = req.body || {};
-  if (nome !== undefined && db.laboratorios.some((x) => x.activo !== false && x.id !== l.id && x.nome.toLowerCase() === String(nome).trim().toLowerCase())) {
-    return res.status(409).json({ message: 'Já existe um laboratório com este nome' });
+router.put('/:id', rbac('admin'), async (req, res, next) => {
+  try {
+    const l = await prisma.laboratorio.findUnique({ where: { id: Number(req.params.id) } });
+    if (!l) return res.status(404).json({ message: 'Laboratório não encontrado' });
+    const { nome, tipo, descricao } = req.body || {};
+    if (nome !== undefined) {
+      const dup = await prisma.laboratorio.findFirst({
+        where: { activo: true, id: { not: l.id }, nome: String(nome).trim() },
+      });
+      if (dup) return res.status(409).json({ message: 'Já existe um laboratório com este nome' });
+    }
+    const data = {};
+    if (nome !== undefined) data.nome = nome;
+    if (tipo !== undefined) data.tipo = tipo;
+    if (descricao !== undefined) data.descricao = descricao;
+    const atualizado = await prisma.laboratorio.update({ where: { id: l.id }, data });
+    res.json(toLabGet(atualizado));
+  } catch (err) {
+    next(err);
   }
-  if (nome !== undefined) l.nome = nome;
-  if (tipo !== undefined) l.tipo = tipo;
-  if (descricao !== undefined) l.descricao = descricao;
-  l.actualizado_em = new Date().toISOString();
-  persist();
-  res.json(l);
 });
 
 // DELETE /labs/:id — A (soft)
-router.delete('/:id', rbac('admin'), (req, res) => {
-  const db = getDb();
-  const l = db.laboratorios.find((x) => x.id === Number(req.params.id));
-  if (!l) return res.status(404).json({ message: 'Laboratório não encontrado' });
-  l.activo = false;
-  persist();
-  res.json({ message: 'Laboratório removido' });
+router.delete('/:id', rbac('admin'), async (req, res, next) => {
+  try {
+    const l = await prisma.laboratorio.findUnique({ where: { id: Number(req.params.id) } });
+    if (!l) return res.status(404).json({ message: 'Laboratório não encontrado' });
+    await prisma.laboratorio.update({ where: { id: l.id }, data: { activo: false } });
+    res.json({ message: 'Laboratório removido' });
+  } catch (err) {
+    next(err);
+  }
 });
 
 export default router;

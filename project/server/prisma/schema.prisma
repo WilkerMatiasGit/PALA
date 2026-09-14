@@ -1,0 +1,435 @@
+// DLab — schema Prisma (espelho AGENTS.md 4.2)
+// Convenções usadas:
+//  - Modelos em PascalCase; tabelas mapeadas para nomes snake_case via @@map.
+//  - BaseEntity: id, criado_em, actualizado_em, activo (soft delete).
+//  - Enums MySQL espelham os enums do AGENTS.md.
+//  - As relações preservam integridade referencial; os nomes denormalizados
+//    (ex: laboratorio_nome) são derivados por include/queries nas rotas.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+// ============================ ENUMS ============================
+
+enum LaboratorioTipo {
+  quimica
+  fisica
+  outro
+}
+
+enum DepartamentoTipo {
+  DET
+  DCSA
+  GEO
+  outro
+}
+
+enum UtilizadorTipo {
+  admin
+  professor
+  tecnico
+  coordenador_dlab
+  supervisor
+  chefe_departamento
+}
+
+enum ActividadeTipo {
+  aula
+  visita
+  projecto
+  estagio
+}
+
+enum ActividadeEstado {
+  pendente
+  revisado_dlab
+  revisado_supervisor
+  rejeitado
+}
+
+enum AgendamentoEstado {
+  nao_revisto // ainda não revisto pela etapa atual
+  pendente // deixado pendente deliberadamente (DLab adiou a decisão)
+  aprovado_dlab
+  aprovado_supervisor
+  rejeitado
+}
+
+enum AprovacaoEtapa {
+  dlab
+  supervisor
+}
+
+enum AprovacaoDecisao {
+  aprovado
+  rejeitado
+}
+
+enum MaterialCategoria {
+  equipamento
+  composto
+  vidraria
+  consumivel
+}
+
+enum MaterialEstado {
+  disponivel
+  em_uso
+  manutencao
+  esgotado
+}
+
+enum MovimentacaoMotivo {
+  consumo_actividade
+  quebra_acidente
+  compra_stock
+  ajuste_inventario
+  outro
+}
+
+enum TecnicoTipo {
+  validador
+  assistente
+}
+
+enum TurnoTipo {
+  manha
+  tarde
+}
+
+// ============================ UTILIZADORES / ACADÉMICO ============================
+
+model Utilizador {
+  id         Int            @id @default(autoincrement())
+  nome       String
+  email      String         @unique
+  senha_hash String?
+  tipo       UtilizadorTipo
+  criado_em  DateTime       @default(now())
+  actualizado_em DateTime   @updatedAt
+  activo     Boolean        @default(true)
+
+  actividades            Actividade[]
+  historico              HistoricoMaterial[]
+  aprovacoes             Aprovacao[]
+  atividadeTecnicos      ActividadeTecnico[]
+  projectosResponsavel   Projecto[]   @relation("ProjectoResponsavel")
+  estagiosResponsavel    Estagio[]    @relation("EstagioResponsavel")
+  relatorios             Relatorio[]
+
+  @@map("utilizadores")
+}
+
+model Curso {
+  id           Int             @id @default(autoincrement())
+  departamento DepartamentoTipo
+  nome         String
+  abreviacao   String
+  criado_em    DateTime        @default(now())
+  actualizado_em DateTime      @updatedAt
+  activo       Boolean         @default(true)
+
+  estudantes         Estudante[]
+  cursoDisciplinas   CursoDisciplina[]
+
+  @@map("cursos")
+}
+
+model Estudante {
+  id      Int    @id // número de matrícula
+  nome    String
+  curso_id Int
+  curso   Curso  @relation(fields: [curso_id], references: [id])
+  criado_em    DateTime @default(now())
+  actualizado_em DateTime @updatedAt
+  activo   Boolean @default(true)
+
+  estagios Estagio[]
+
+  @@map("estudantes")
+}
+
+model Disciplina {
+  id           Int          @id @default(autoincrement())
+  nome         String
+  criado_em    DateTime     @default(now())
+  actualizado_em DateTime   @updatedAt
+  activo       Boolean      @default(true)
+
+  cursoDisciplinas CursoDisciplina[]
+
+  @@map("disciplinas")
+}
+
+model CursoDisciplina {
+  id            Int    @id @default(autoincrement())
+  curso_id      Int
+  disciplina_id Int
+  semestre      Int
+  curso         Curso      @relation(fields: [curso_id], references: [id])
+  disciplina    Disciplina @relation(fields: [disciplina_id], references: [id])
+  criado_em     DateTime   @default(now())
+  actualizado_em DateTime  @updatedAt
+  activo        Boolean    @default(true)
+
+  aulas Aula[]
+
+  @@unique([curso_id, disciplina_id])
+  @@map("curso_disciplinas")
+}
+
+// ============================ INFRAESTRUTURA E RECURSOS ============================
+
+model Laboratorio {
+  id          Int            @id @default(autoincrement())
+  nome        String
+  tipo        LaboratorioTipo
+  descricao   String?
+  criado_em   DateTime       @default(now())
+  actualizado_em DateTime    @updatedAt
+  activo      Boolean        @default(true)
+
+  materiais   Material[]
+  actividades Actividade[]
+  relatorios  Relatorio[]
+
+  @@map("laboratorios")
+}
+
+model Material {
+  id             Int             @id @default(autoincrement())
+  laboratorio_id Int
+  nome           String
+  categoria      MaterialCategoria
+  quantidade     Int // cache do SUM(histórico) — RF17 (nunca editado diretamente)
+  quantidade_minima Int
+  unidade        String
+  estado         MaterialEstado
+  criado_em      DateTime        @default(now())
+  actualizado_em DateTime        @updatedAt
+  activo         Boolean         @default(true)
+
+  laboratorio    Laboratorio     @relation(fields: [laboratorio_id], references: [id])
+  historico      HistoricoMaterial[]
+  atividadeMateriais ActividadeMaterial[]
+
+  @@map("materiais")
+}
+
+model HistoricoMaterial {
+  id                   Int              @id @default(autoincrement())
+  material_id          Int
+  utilizador_id        Int
+  actividade_id        Int?             // NULL se for acidente/compra fora de aula
+  quantidade_movimentada Int
+  motivo               MovimentacaoMotivo
+  descricao            String
+  criado_em            DateTime         @default(now())
+  actualizado_em       DateTime         @updatedAt
+  activo               Boolean          @default(true)
+
+  material             Material         @relation(fields: [material_id], references: [id])
+  utilizador           Utilizador       @relation(fields: [utilizador_id], references: [id])
+  actividade           Actividade?      @relation(fields: [actividade_id], references: [id])
+
+  @@map("historico_materiais")
+}
+
+// ============================ TRABALHO E ATIVIDADES ============================
+
+model Actividade {
+  id                Int             @id @default(autoincrement())
+  nome              String
+  utilizador_id     Int
+  laboratorio_id    Int
+  tipo              ActividadeTipo
+  estado            ActividadeEstado @default(pendente)
+  observacoes       String?
+  num_participantes Int             @default(1)
+  precisa_assistente Boolean        @default(false)
+  criado_em         DateTime        @default(now())
+  actualizado_em    DateTime        @updatedAt
+  activo            Boolean         @default(true)
+
+  utilizador         Utilizador     @relation(fields: [utilizador_id], references: [id])
+  laboratorio        Laboratorio    @relation(fields: [laboratorio_id], references: [id])
+  agendamentos       Agendamento[]
+  aprovacoes         Aprovacao[]
+  atividadeMateriais ActividadeMaterial[]
+  atividadeTecnicos  ActividadeTecnico[]
+  aula               Aula?
+  visita             Visita?
+  projecto           Projecto?
+  estagio            Estagio?
+  historico          HistoricoMaterial[]
+
+  @@map("actividades")
+}
+
+model ActividadeTecnico {
+  id            Int         @id @default(autoincrement())
+  actividade_id Int
+  utilizador_id Int
+  papel         TecnicoTipo // validador (obrigatório) | assistente (opcional)
+  criado_em     DateTime    @default(now())
+  actualizado_em DateTime   @updatedAt
+  activo        Boolean     @default(true)
+
+  actividade   Actividade  @relation(fields: [actividade_id], references: [id])
+  utilizador   Utilizador  @relation(fields: [utilizador_id], references: [id])
+
+  @@unique([actividade_id, papel])
+  @@map("actividade_tecnico")
+}
+
+model ActividadeMaterial {
+  id                Int      @id @default(autoincrement())
+  actividade_id     Int
+  material_id       Int
+  quantidade_estimada Int
+  criado_em         DateTime @default(now())
+  actualizado_em    DateTime @updatedAt
+  activo            Boolean  @default(true)
+
+  actividade Actividade @relation(fields: [actividade_id], references: [id])
+  material   Material   @relation(fields: [material_id], references: [id])
+
+  @@unique([actividade_id, material_id])
+  @@map("actividade_materiais")
+}
+
+model Aprovacao {
+  id           Int             @id @default(autoincrement())
+  agendamento_id Int?          // NULL em decisões ao nível da atividade (conclusão/rejeição)
+  actividade_id Int?           // atividade à qual a decisão se refere (preenchida sempre)
+  aprovador_id Int
+  etapa        AprovacaoEtapa
+  decisao      AprovacaoDecisao
+  comentario   String?
+  decidido_em  DateTime?
+  criado_em    DateTime        @default(now())
+  actualizado_em DateTime      @updatedAt
+  activo       Boolean         @default(true)
+
+  agendamento Agendamento? @relation(fields: [agendamento_id], references: [id])
+  actividade  Actividade?  @relation(fields: [actividade_id], references: [id])
+  aprovador   Utilizador   @relation(fields: [aprovador_id], references: [id])
+
+  @@map("aprovacoes")
+}
+
+model Agendamento {
+  id                   Int              @id @default(autoincrement())
+  actividade_id        Int
+  hora_inicio          DateTime
+  hora_fim             DateTime
+  confirmado_professor_em DateTime?
+  confirmado_tecnico_em   DateTime?
+  realizado            Boolean          @default(false)
+  estado               AgendamentoEstado @default(nao_revisto)
+  criado_em            DateTime         @default(now())
+  actualizado_em       DateTime         @updatedAt
+  activo               Boolean          @default(true)
+
+  actividade Actividade @relation(fields: [actividade_id], references: [id])
+  aprovacoes Aprovacao[]
+
+  @@map("agendamentos")
+}
+
+// ============================ ESPECIALIZAÇÕES DE ATIVIDADES ============================
+
+model Aula {
+  id                Int      @id @default(autoincrement())
+  actividade_id     Int      @unique
+  curso_disciplina_id Int
+  tema              String?
+  turno             TurnoTipo?
+  numero_turma      Int?
+  criado_em         DateTime @default(now())
+  actualizado_em    DateTime @updatedAt
+  activo            Boolean  @default(true)
+
+  actividade       Actividade      @relation(fields: [actividade_id], references: [id])
+  curso_disciplina CursoDisciplina @relation(fields: [curso_disciplina_id], references: [id])
+
+  @@map("aulas")
+}
+
+model Visita {
+  id            Int      @id @default(autoincrement())
+  actividade_id Int      @unique
+  nome_visitante String
+  instituicao   String?
+  telefone      String?
+  email         String?
+  criado_em     DateTime @default(now())
+  actualizado_em DateTime @updatedAt
+  activo        Boolean  @default(true)
+
+  actividade Actividade @relation(fields: [actividade_id], references: [id])
+
+  @@map("visitas")
+}
+
+model Projecto {
+  id            Int      @id @default(autoincrement())
+  actividade_id Int      @unique
+  responsavel_id Int
+  titulo        String
+  descricao     String?
+  data_inicio   DateTime
+  data_fim      DateTime
+  anexo_path    String?
+  criado_em     DateTime @default(now())
+  actualizado_em DateTime @updatedAt
+  activo        Boolean  @default(true)
+
+  actividade  Actividade @relation(fields: [actividade_id], references: [id])
+  responsavel Utilizador @relation("ProjectoResponsavel", fields: [responsavel_id], references: [id])
+
+  @@map("projectos")
+}
+
+model Estagio {
+  id            Int       @id @default(autoincrement())
+  actividade_id Int       @unique
+  responsavel_id Int
+  estudante_id  Int
+  data_inicio   DateTime
+  data_fim      DateTime
+  anexo_path    String?
+  criado_em     DateTime  @default(now())
+  actualizado_em DateTime @updatedAt
+  activo        Boolean   @default(true)
+
+  actividade  Actividade @relation(fields: [actividade_id], references: [id])
+  responsavel Utilizador @relation("EstagioResponsavel", fields: [responsavel_id], references: [id])
+  estudante   Estudante  @relation(fields: [estudante_id], references: [id])
+
+  @@map("estagios")
+}
+
+// ============================ RELATÓRIOS ============================
+
+model Relatorio {
+  id           Int      @id @default(autoincrement())
+  laboratorio_id Int
+  criado_por   Int
+  mes          Int
+  ano          Int
+  dados_json   String @db.LongText
+  criado_em    DateTime @default(now())
+  actualizado_em DateTime @updatedAt
+  activo       Boolean  @default(true)
+
+  laboratorio Laboratorio @relation(fields: [laboratorio_id], references: [id])
+  criadoPor   Utilizador  @relation(fields: [criado_por], references: [id])
+
+  @@map("relatorios")
+}

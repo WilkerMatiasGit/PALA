@@ -12,10 +12,9 @@ import { ErrorState } from '@/components/ui/error-state';
 import { actividadesService } from '@/services/actividades.service';
 import { agendamentosService } from '@/services/agendamentos.service';
 import { aprovacoesService } from '@/services/aprovacoes.service';
-import { formatEstado, formatTipo, formatDecisao, formatPapel } from '@/utils/formatEstado';
+import { formatEstado, formatTipo, formatDecisao, formatPapel, formatAgendamentoEstado } from '@/utils/formatEstado';
 import { formatDate, formatDateTime } from '@/utils/formatDate';
 import { useAuth } from '@/context/AuthContext';
-import { hasRole } from '@/utils/roleGuard';
 import type { ActividadeGet, AulaGet, VisitaGet, ProjectoGet, EstagioGet, ActividadeTecnicoGet, ActividadeMaterialGet } from '@/types/actividade.types';
 import type { AgendamentoGet } from '@/types/agendamento.types';
 import type { AprovacaoGet } from '@/types/aprovacao.types';
@@ -25,8 +24,6 @@ export default function ActividadeDetalhe() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const canConfirm = hasRole(user?.tipo, ['admin', 'professor']);
-  const canConfirmTec = hasRole(user?.tipo, ['admin', 'tecnico']);
 
   const [actividade, setActividade] = useState<ActividadeGet | null>(null);
   const [aula, setAula] = useState<AulaGet | null>(null);
@@ -77,6 +74,11 @@ export default function ActividadeDetalhe() {
   const est = formatEstado(actividade.estado);
   const tipo = formatTipo(actividade.tipo);
 
+  const ehDono = user?.tipo === 'professor' && user.id === actividade.utilizador_id;
+  const ehValidador = user?.tipo === 'tecnico' && tecnicos.some((t) => t.utilizador_id === user?.id && t.papel === 'validador');
+  const canConfirm = user?.tipo === 'admin' || ehDono;
+  const canConfirmTec = user?.tipo === 'admin' || ehValidador;
+
   const handleConfirmProf = (agId: number) => {
     agendamentosService.confirmarProfessor(agId).then(() => { toast.success('Presença confirmada pelo professor'); load(); });
   };
@@ -118,6 +120,8 @@ export default function ActividadeDetalhe() {
             {actividade.tipo === 'aula' && aula && (
               <>
                 <div className="flex justify-between"><span className="text-muted-foreground">Disciplina</span><span className="font-medium">{aula.curso_disciplina_nome}</span></div>
+                {aula.turma && <div className="flex justify-between"><span className="text-muted-foreground">Turma</span><span className="font-medium font-mono">{aula.turma}</span></div>}
+                {aula.turno && <div className="flex justify-between"><span className="text-muted-foreground">Turno</span><span className="font-medium">{aula.turno === 'manha' ? 'Manhã' : 'Tarde'}</span></div>}
                 <div className="flex justify-between"><span className="text-muted-foreground">Tema</span><span className="font-medium">{aula.tema || '—'}</span></div>
               </>
             )}
@@ -157,7 +161,10 @@ export default function ActividadeDetalhe() {
               <EmptyState icon={Circle} title="Sem agendamentos" />
             ) : (
               <div className="space-y-2">
-                {agendamentos.map((ag) => (
+                {agendamentos.map((ag) => {
+                  const agEst = formatAgendamentoEstado(ag.estado);
+                  const aprovado = ag.estado === 'aprovado_supervisor';
+                  return (
                   <div key={ag.id} className="flex items-center justify-between rounded-lg border p-3">
                     <div>
                       <p className="text-sm font-medium">{formatDate(ag.hora_inicio)}</p>
@@ -166,7 +173,7 @@ export default function ActividadeDetalhe() {
                     <div className="flex items-center gap-2">
                       {ag.realizado ? (
                         <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200"><CheckCircle2 className="mr-1 h-3 w-3" /> Realizado</Badge>
-                      ) : (
+                      ) : aprovado ? (
                         <>
                           {ag.confirmado_professor_em ? (
                             <Badge className="bg-blue-100 text-blue-800 border-blue-200"><CheckCircle2 className="mr-1 h-3 w-3" /> Prof ✓</Badge>
@@ -183,10 +190,13 @@ export default function ActividadeDetalhe() {
                             <Badge variant="outline"><Circle className="mr-1 h-3 w-3" /> Técn ☐</Badge>
                           )}
                         </>
+                      ) : (
+                        <Badge variant="outline" className={agEst.className}>{agEst.label}</Badge>
                       )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>

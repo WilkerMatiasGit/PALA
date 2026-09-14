@@ -14,6 +14,7 @@ export interface CursoDisciplinaGet {
   id: number;
   curso_id: number;
   curso_nome: string;
+  curso_abreviacao: string;
   disciplina_id: number;
   disciplina_nome: string;
   semestre: number;

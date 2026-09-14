@@ -70,8 +70,8 @@ export function MaterialUpsertModal({ open, onOpenChange, material, onSaved }: P
       }
       onSaved();
       onOpenChange(false);
-    } catch {
-      toast.error('Erro ao guardar material');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao guardar material');
     } finally {
       setSaving(false);
     }

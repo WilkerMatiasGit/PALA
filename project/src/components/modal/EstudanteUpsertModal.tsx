@@ -58,8 +58,8 @@ export function EstudanteUpsertModal({ open, onOpenChange, estudante, onSaved }:
       }
       onSaved();
       onOpenChange(false);
-    } catch {
-      toast.error('Erro ao guardar estudante');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao guardar estudante');
     } finally {
       setSaving(false);
     }

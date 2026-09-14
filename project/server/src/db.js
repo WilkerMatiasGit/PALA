@@ -1,56 +1,28 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { DATA_FILE } from './config.js';
-import { buildSeed } from './seed.js';
+import 'dotenv/config';
+import { PrismaClient } from '@prisma/client';
+import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 
-// Data store in-memory (esta é a fonte de verdade durante runtime).
-// Persistida em DATA_FILE para survive a restarts. É recriada a partir do seed
-// se o ficheiro não existir.
-let db = null;
-
-function loadFromDisk() {
-  try {
-    if (fs.existsSync(DATA_FILE)) {
-      const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-      return JSON.parse(raw);
-    }
-  } catch (err) {
-    console.error('[db] Falha ao ler ficheiro de dados; a recriar a partir do seed.', err.message);
-  }
-  return null;
+function dbOptionsFromUrl(url) {
+  const u = new URL(url);
+  const connectionLimit = Number(u.searchParams.get('connection_limit')) || 5;
+  return {
+    host: u.hostname,
+    port: Number(u.port) || 3306,
+    user: decodeURIComponent(u.username),
+    password: decodeURIComponent(u.password),
+    database: u.pathname.replace(/^\//, ''),
+    connectionLimit,
+  };
 }
 
-export function initDb() {
-  const loaded = loadFromDisk();
-  db = loaded && loaded.meta && loaded.meta.seedVersion ? loaded : buildSeed();
-  persist();
-  return db;
-}
+// Prisma ORM 7 exige um driver adapter para MySQL/MariaDB.
+const adapter = new PrismaMariaDb(dbOptionsFromUrl(process.env.DATABASE_URL));
 
-export function persist() {
-  if (!db) return;
-  try {
-    fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
-    const tmp = DATA_FILE + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(db, null, 2), 'utf-8');
-    fs.renameSync(tmp, DATA_FILE);
-  } catch (err) {
-    console.error('[db] Falha ao persistir dados.', err.message);
-  }
-}
+// Prisma client singleton — a fonte de dados real (MySQL).
+export const prisma = new PrismaClient({ adapter });
 
-export function getDb() {
-  if (!db) initDb();
-  return db;
-}
-
-export function genId() {
-  return ++db.nextId;
-}
-
-// Reinicia a base para o seed (útil em dev). Devolve true se foi feito.
-export function resetDb() {
-  db = buildSeed();
-  persist();
-  return true;
+// Verifica a ligação à base no arranque (falha rápido se .env não estiver configurado).
+export async function initDb() {
+  await prisma.$queryRaw`SELECT 1`;
+  return prisma;
 }

@@ -17,47 +17,57 @@ import { actividadesService } from '@/services/actividades.service';
 import { agendamentosService } from '@/services/agendamentos.service';
 import { utilizadoresService } from '@/services/utilizadores.service';
 import { useAuth } from '@/context/AuthContext';
-import { formatEstado, formatTipo } from '@/utils/formatEstado';
+import { formatEstado, formatTipo, formatAgendamentoEstado } from '@/utils/formatEstado';
 import { formatDate, formatDateTime } from '@/utils/formatDate';
-import type { ActividadeGet, ActividadeMaterialGet } from '@/types/actividade.types';
+import type { ActividadeGet, ActividadeMaterialGet, ActividadeTecnicoGet } from '@/types/actividade.types';
 import type { AgendamentoGet } from '@/types/agendamento.types';
+import type { AprovacaoGet } from '@/types/aprovacao.types';
 import type { UtilizadorGet } from '@/types/utilizador.types';
-import { CheckCircle, XCircle, FileText } from 'lucide-react';
+import { CheckCircle, XCircle, FileText, Wrench, ChevronRight, Flag, RotateCcw } from 'lucide-react';
+
+type Dialog =
+  | { kind: 'voto'; ag: AgendamentoGet; decisao: 'aprovar' | 'rejeitar' }
+  | { kind: 'concluir' }
+  | { kind: 'rejeitar' }
+  | null;
 
 export default function AprovacaoDetalhe() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const isAdmin = user?.tipo === 'admin';
-  const isSupervisor = user?.tipo === 'supervisor';
 
   const [actividade, setActividade] = useState<ActividadeGet | null>(null);
   const [agendamentos, setAgendamentos] = useState<AgendamentoGet[]>([]);
   const [materiais, setMateriais] = useState<ActividadeMaterialGet[]>([]);
-  const [tecnicos, setTecnicos] = useState<UtilizadorGet[]>([]);
+  const [aprovacoes, setAprovacoes] = useState<AprovacaoGet[]>([]);
+  const [tecnicosDisponiveis, setTecnicosDisponiveis] = useState<UtilizadorGet[]>([]);
+  const [tecnicosAtribuidos, setTecnicosAtribuidos] = useState<ActividadeTecnicoGet[]>([]);
   const [comentario, setComentario] = useState('');
   const [tecnicoId, setTecnicoId] = useState('');
   const [assistenteId, setAssistenteId] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [confirmAction, setConfirmAction] = useState<'aprovar' | 'rejeitar' | null>(null);
+  const [dialog, setDialog] = useState<Dialog>(null);
 
   const load = () => {
     if (!id) return;
     const aid = Number(id);
     setLoading(true);
-    aprovacoesService.get(aid).then(async (aprov) => {
-      const act = await actividadesService.get(aprov.actividade_id);
-      setActividade(act);
-      const [ags, mats, tecnicos] = await Promise.all([
-        agendamentosService.listByActividade(act.id),
-        actividadesService.listMateriais(act.id),
-        utilizadoresService.listTecnicos(),
-      ]);
+    Promise.all([
+      actividadesService.get(aid),
+      agendamentosService.listByActividade(aid),
+      actividadesService.listMateriais(aid),
+      aprovacoesService.listByActividade(aid),
+      utilizadoresService.listTecnicos(),
+      actividadesService.listTecnicos(aid),
+    ]).then(([a, ags, mats, aps, tecns, attrib]) => {
+      setActividade(a);
       setAgendamentos(ags);
       setMateriais(mats);
-      setTecnicos(tecnicos);
+      setAprovacoes(aps);
+      setTecnicosDisponiveis(tecns);
+      setTecnicosAtribuidos(attrib);
     }).catch(() => setError(true)).finally(() => setLoading(false));
   };
 
@@ -66,57 +76,183 @@ export default function AprovacaoDetalhe() {
   if (loading) return <FullPageSpinner />;
   if (error || !actividade) return <ErrorState onRetry={load} />;
 
+  const isAdmin = user?.tipo === 'admin';
+  const isSupervisor = user?.tipo === 'supervisor';
+
+  // Etapa atual coerente com o estado da atividade
+  const etapaAtual: 'dlab' | 'supervisor' | null = isSupervisor
+    ? 'supervisor'
+    : isAdmin
+      ? (actividade.estado === 'revisado_dlab' ? 'supervisor' : 'dlab')
+      : user?.tipo === 'coordenador_dlab'
+        ? 'dlab'
+        : null;
+
+  const estaEmRevisao =
+    (actividade.estado === 'pendente' && etapaAtual === 'dlab') ||
+    (actividade.estado === 'revisado_dlab' && etapaAtual === 'supervisor');
+
+  // Agendamentos que aguardam a decisão desta etapa.
+  // Etapa 1 (DLab): os ainda não revistos (nao_revisto).
+  // Etapa 2 (Supervisor): os aprovados pelo DLab ou deixados pendentes pelo DLab.
+  const agVotaveis = agendamentos.filter((g) =>
+    etapaAtual === 'supervisor'
+      ? g.estado === 'aprovado_dlab' || g.estado === 'pendente'
+      : g.estado === 'nao_revisto'
+  );
+
+  // Decisões individuais já emitidas nesta etapa (para permitir rollback)
+  const decisaoIds = new Set<number>(
+    aprovacoes
+      .filter((a) => a.etapa === etapaAtual && a.agendamento_id != null)
+      .map((a) => a.agendamento_id as number)
+  );
+
+  // Bug 1.2: "Deixar pendente" existe apenas na etapa 1 (DLab). Na etapa 2
+  // (Supervisor, incluindo admin) não há etapa seguinte para adiar a decisão.
+  const mostraDeixarPendente = estaEmRevisao && etapaAtual === 'dlab';
+
+  const validadorAtribuido = tecnicosAtribuidos.some((t) => t.papel === 'validador');
+  const mostraTecnico = etapaAtual === 'supervisor';
   const est = formatEstado(actividade.estado);
   const tipo = formatTipo(actividade.tipo);
 
-  // Etapa determinada pelo estado atual da atividade (não pelo role do utilizador)
-  const etapaAtual = actividade.estado === 'aprovado_dlab' ? 'supervisor' : 'dlab';
-  // A etapa do Supervisor é decidida pelo Admin ou pelo Supervisor
-  const podeDecidirSupervisor = isAdmin || isSupervisor;
-  const podeDecidir = etapaAtual === 'supervisor' ? podeDecidirSupervisor : true;
-  const mostraTecnico = etapaAtual === 'supervisor' && podeDecidirSupervisor;
+  // Todos os agendamentos rejeitados → concluir a etapa rejeita a atividade inteira
+  const todosRejeitados = agendamentos.length > 0 && agendamentos.every((g) => g.estado === 'rejeitado');
 
-  const handleDecision = async () => {
+  const podeReverter = (g: AgendamentoGet) => {
+    if (!estaEmRevisao) return false;
+    if (etapaAtual === 'dlab') return g.estado !== 'nao_revisto';
+    // etapa 2: só reverte se houver uma decisão do Supervisor nesta sessão
+    return decisaoIds.has(g.id);
+  };
+
+  const atribuirTecnicos = async (actividadeId: number) => {
+    if (!validadorAtribuido && tecnicoId) {
+      await actividadesService.addTecnico({ actividade_id: actividadeId, utilizador_id: Number(tecnicoId), papel: 'validador' });
+    }
+    if (actividade.precisa_assistente && assistenteId) {
+      await actividadesService.addTecnico({ actividade_id: actividadeId, utilizador_id: Number(assistenteId), papel: 'assistente' });
+    }
+  };
+
+  const handleVoto = async (ag: AgendamentoGet, decisao: 'aprovar' | 'rejeitar') => {
     if (!user) return;
+    // Nenhuma ação individual exige comentário — só os botões de conclusão de etapa.
 
-    // Validação frontend: parecer técnico é sempre obrigatório
+    setSubmitting(true);
+    try {
+      await aprovacoesService.create({
+        agendamento_id: ag.id,
+        etapa: etapaAtual!,
+        decisao: decisao === 'aprovar' ? 'aprovado' : 'rejeitado',
+        comentario: comentario.trim() || undefined,
+      }, user.id);
+      toast.success(`Agendamento ${decisao === 'aprovar' ? 'aprovado' : 'rejeitado'}`);
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao processar decisão');
+    } finally {
+      setSubmitting(false);
+      setDialog(null);
+    }
+  };
+
+  const handleDeixarPendente = async (ag: AgendamentoGet) => {
+    setSubmitting(true);
+    try {
+      await aprovacoesService.deixarPendente(ag.id);
+      toast.success('Agendamento deixado pendente');
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao deixar pendente');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRollback = async (ag: AgendamentoGet) => {
+    if (!etapaAtual) return;
+    setSubmitting(true);
+    try {
+      await aprovacoesService.rollback(ag.id, etapaAtual);
+      toast.success('Decisão revertida');
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao reverter decisão');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleConcluir = async () => {
     if (!comentario.trim()) {
-      toast.error('O comentário/parecer é obrigatório');
-      setConfirmAction(null);
+      toast.error('O comentário é obrigatório ao concluir esta etapa');
+      setDialog(null);
       return;
     }
-    // Etapa Supervisor: técnico validador é obrigatório na aprovação
-    if (confirmAction === 'aprovar' && mostraTecnico && !tecnicoId) {
-      toast.error('Atribua um Técnico (Validador) antes de aprovar');
-      setConfirmAction(null);
-      return;
+    if (etapaAtual === 'dlab') {
+      const porRevistar = agendamentos.filter((g) => g.estado === 'nao_revisto').length;
+      if (porRevistar > 0) {
+        toast.error(`Ainda existem ${porRevistar} agendamento(s) por rever nesta etapa`);
+        setDialog(null);
+        return;
+      }
+    } else if (etapaAtual === 'supervisor') {
+      const porFinalizar = agendamentos.filter((g) => g.estado !== 'aprovado_supervisor' && g.estado !== 'rejeitado').length;
+      if (porFinalizar > 0) {
+        toast.error(`Ainda existem ${porFinalizar} agendamento(s) por decidir na aprovação final`);
+        setDialog(null);
+        return;
+      }
+      // Bug 1.4: o técnico validador só é exigido na conclusão, não por cada aprovação
+      if (!validadorAtribuido && !tecnicoId) {
+        toast.error('Atribua um Técnico (Validador) antes de concluir');
+        setDialog(null);
+        return;
+      }
     }
 
     setSubmitting(true);
     try {
-      const etapa = etapaAtual;
-      await aprovacoesService.create({
-        actividade_id: actividade.id,
-        etapa,
-        decisao: confirmAction === 'aprovar' ? 'aprovado' : 'rejeitado',
-        comentario: comentario.trim(),
-      }, user.id);
-
-      if (confirmAction === 'aprovar' && mostraTecnico && tecnicoId) {
-        await actividadesService.addTecnico({ actividade_id: actividade.id, utilizador_id: Number(tecnicoId), papel: 'validador' });
-        if (assistenteId) {
-          await actividadesService.addTecnico({ actividade_id: actividade.id, utilizador_id: Number(assistenteId), papel: 'assistente' });
-        }
+      if (etapaAtual === 'supervisor' && !validadorAtribuido) {
+        await atribuirTecnicos(actividade.id);
       }
-
-      toast.success(confirmAction === 'aprovar' ? 'Actividade aprovada' : 'Actividade rejeitada');
+      await aprovacoesService.finalizar(actividade.id, comentario.trim());
+      toast.success(etapaAtual === 'supervisor' ? 'Aprovação final concluída' : 'Revisão do DLab concluída');
       navigate('/aprovacoes');
-    } catch {
-      toast.error('Erro ao processar decisão');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao concluir revisão');
     } finally {
       setSubmitting(false);
-      setConfirmAction(null);
+      setDialog(null);
     }
+  };
+
+  const handleRejeitar = async () => {
+    if (!comentario.trim()) {
+      toast.error('A justificação é obrigatória ao rejeitar a atividade');
+      setDialog(null);
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await aprovacoesService.rejeitarActividade(actividade.id, comentario.trim());
+      toast.success('Actividade rejeitada');
+      navigate('/aprovacoes');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao rejeitar atividade');
+    } finally {
+      setSubmitting(false);
+      setDialog(null);
+    }
+  };
+
+  const confirmarDialog = () => {
+    if (!dialog) return;
+    if (dialog.kind === 'voto') handleVoto(dialog.ag, dialog.decisao);
+    else if (dialog.kind === 'concluir') handleConcluir();
+    else handleRejeitar();
   };
 
   return (
@@ -151,12 +287,44 @@ export default function AprovacaoDetalhe() {
               <EmptyState icon={FileText} title="Sem agendamentos" />
             ) : (
               <div className="space-y-2">
-                {agendamentos.map((ag) => (
-                  <div key={ag.id} className="rounded-lg border p-3 text-sm">
-                    <p className="font-medium">{formatDate(ag.hora_inicio)}</p>
-                    <p className="text-xs text-muted-foreground">{formatDateTime(ag.hora_inicio)} - {formatDateTime(ag.hora_fim)}</p>
-                  </div>
-                ))}
+                {agendamentos.map((ag) => {
+                  const agEst = formatAgendamentoEstado(ag.estado);
+                  const votavel = estaEmRevisao && agVotaveis.some((g) => g.id === ag.id);
+                  const revertivel = podeReverter(ag);
+                  return (
+                    <div key={ag.id} className="rounded-lg border p-3 text-sm">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium">{formatDate(ag.hora_inicio)}</p>
+                          <p className="text-xs text-muted-foreground">{formatDateTime(ag.hora_inicio)} - {formatDateTime(ag.hora_fim)}</p>
+                        </div>
+                        <Badge variant="outline" className={agEst.className}>{agEst.label}</Badge>
+                      </div>
+                      {votavel && (
+                        <div className="mt-2 flex justify-end gap-2">
+                          {mostraDeixarPendente && (
+                            <Button size="sm" variant="outline" onClick={() => handleDeixarPendente(ag)} disabled={submitting}>
+                              Deixar pendente
+                            </Button>
+                          )}
+                          <Button size="sm" variant="destructive" onClick={() => setDialog({ kind: 'voto', ag, decisao: 'rejeitar' })} disabled={submitting}>
+                            <XCircle className="mr-1 h-3 w-3" /> Rejeitar
+                          </Button>
+                          <Button size="sm" onClick={() => setDialog({ kind: 'voto', ag, decisao: 'aprovar' })} disabled={submitting}>
+                            <CheckCircle className="mr-1 h-3 w-3" /> Aprovar
+                          </Button>
+                        </div>
+                      )}
+                      {revertivel && (
+                        <div className="mt-2 flex justify-end">
+                          <Button size="sm" variant="ghost" onClick={() => handleRollback(ag)} disabled={submitting}>
+                            <RotateCcw className="mr-1 h-3 w-3" /> Rever decisão
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </CardContent>
@@ -180,6 +348,44 @@ export default function AprovacaoDetalhe() {
           </CardContent>
         </Card>
 
+        {mostraTecnico && (
+          <Card>
+            <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Wrench className="h-4 w-4" /> Técnico & Assistente</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              {tecnicosAtribuidos.length > 0 ? (
+                <div className="space-y-2 text-sm">
+                  {tecnicosAtribuidos.map((t) => (
+                    <div key={t.id} className="flex justify-between">
+                      <span className="text-muted-foreground">{t.papel === 'validador' ? 'Validador' : 'Assistente'}</span>
+                      <Badge variant="outline">{t.utilizador_nome}</Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <Label>Atribuir Técnico (Validador) *</Label>
+                    <Select value={tecnicoId} onValueChange={setTecnicoId}>
+                      <SelectTrigger><SelectValue placeholder="Selecionar técnico..." /></SelectTrigger>
+                      <SelectContent>{tecnicosDisponiveis.map((t) => <SelectItem key={t.id} value={String(t.id)}>{t.nome}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  {actividade.precisa_assistente && (
+                    <div className="space-y-2">
+                      <Label>Atribuir Assistente</Label>
+                      <Select value={assistenteId} onValueChange={setAssistenteId}>
+                        <SelectTrigger><SelectValue placeholder="Selecionar assistente..." /></SelectTrigger>
+                        <SelectContent>{tecnicosDisponiveis.map((t) => <SelectItem key={t.id} value={String(t.id)}>{t.nome}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">O técnico será atribuído ao concluir a aprovação final.</p>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Decision panel */}
         <Card>
           <CardHeader><CardTitle className="text-base">Decisão</CardTitle></CardHeader>
@@ -187,43 +393,33 @@ export default function AprovacaoDetalhe() {
             <div className="space-y-2">
               <Label htmlFor="comentario">Comentário / Parecer</Label>
               <Textarea id="comentario" value={comentario} onChange={(e) => setComentario(e.target.value)} rows={3} placeholder="Escreva o seu parecer técnico..." />
+              {estaEmRevisao && (
+                <p className="text-xs text-muted-foreground">
+                  O comentário é obrigatório ao concluir a etapa e ao rejeitar a atividade. As decisões individuais não precisam de comentário.
+                </p>
+              )}
             </div>
 
-            {mostraTecnico && (
-              <div className="space-y-3 border-t pt-4">
-                <div className="space-y-2">
-                  <Label>Atribuir Técnico (Validador) *</Label>
-                  <Select value={tecnicoId} onValueChange={setTecnicoId}>
-                    <SelectTrigger><SelectValue placeholder="Selecionar técnico..." /></SelectTrigger>
-                    <SelectContent>{tecnicos.map((t) => <SelectItem key={t.id} value={String(t.id)}>{t.nome}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                {actividade.precisa_assistente && (
-                  <div className="space-y-2">
-                    <Label>Atribuir Assistente</Label>
-                    <Select value={assistenteId} onValueChange={setAssistenteId}>
-                      <SelectTrigger><SelectValue placeholder="Selecionar assistente..." /></SelectTrigger>
-                      <SelectContent>{tecnicos.map((t) => <SelectItem key={t.id} value={String(t.id)}>{t.nome}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {podeDecidir ? (
-              <div className="flex gap-2 pt-2">
-                <Button variant="destructive" onClick={() => setConfirmAction('rejeitar')} disabled={submitting}>
-                  <XCircle className="mr-2 h-4 w-4" /> Rejeitar
+            {estaEmRevisao ? (
+              <div className="flex flex-wrap gap-2 pt-2">
+                <Button variant="destructive" onClick={() => setDialog({ kind: 'rejeitar' })} disabled={submitting}>
+                  <Flag className="mr-2 h-4 w-4" /> Rejeitar Atividade
                 </Button>
-                <Button onClick={() => setConfirmAction('aprovar')} disabled={submitting}>
-                  <CheckCircle className="mr-2 h-4 w-4" /> Aprovar
+                <Button onClick={() => setDialog({ kind: 'concluir' })} disabled={submitting}>
+                  <ChevronRight className="mr-2 h-4 w-4" />
+                  {etapaAtual === 'supervisor' ? 'Concluir Aprovação Final' : 'Concluir Revisão DLab'}
                 </Button>
+                <p className="w-full text-xs text-muted-foreground">
+                  {etapaAtual === 'dlab'
+                    ? `${agendamentos.filter((g) => g.estado === 'nao_revisto').length} agendamento(s) por rever nesta etapa.`
+                    : `${agendamentos.filter((g) => g.estado !== 'aprovado_supervisor' && g.estado !== 'rejeitado').length} agendamento(s) por decidir nesta etapa. Tem de decidir todos antes de concluir.`}
+                </p>
               </div>
             ) : (
               <p className="pt-2 text-sm text-muted-foreground">
-                {etapaAtual === 'supervisor'
-                  ? 'Esta etapa é decidida pelo Supervisor ou pelo Admin.'
-                  : 'A decisão desta etapa está reservada ao Coordenador DLab e ao Admin.'}
+                {actividade.estado === 'revisado_supervisor'
+                    ? 'A aprovação final já foi concluída. Esta atividade está disponível no calendário.'
+                    : 'Esta atividade foi rejeitada e o fluxo foi interrompido.'}
               </p>
             )}
           </CardContent>
@@ -231,14 +427,33 @@ export default function AprovacaoDetalhe() {
       </div>
 
       <ConfirmDialog
-        open={!!confirmAction} onOpenChange={(v) => !v && setConfirmAction(null)}
-        title={confirmAction === 'aprovar' ? 'Confirmar aprovação' : 'Confirmar rejeição'}
-        description={confirmAction === 'aprovar'
-          ? 'Pretende aprovar esta actividade? Esta ação não pode ser desfeita.'
-          : 'Pretende rejeitar esta actividade? O fluxo será interrompido.'}
-        confirmLabel={confirmAction === 'aprovar' ? 'Aprovar' : 'Rejeitar'}
-        variant={confirmAction === 'aprovar' ? 'default' : 'destructive'}
-        onConfirm={handleDecision}
+        open={!!dialog}
+        onOpenChange={(v) => !v && setDialog(null)}
+        title={
+          dialog?.kind === 'voto'
+            ? (dialog.decisao === 'aprovar' ? 'Confirmar aprovação do agendamento' : 'Confirmar rejeição do agendamento')
+            : dialog?.kind === 'concluir'
+              ? (etapaAtual === 'supervisor' ? 'Confirmar aprovação final' : 'Confirmar conclusão da revisão DLab')
+              : 'Confirmar rejeição da atividade'
+        }
+        description={
+          dialog?.kind === 'voto'
+            ? 'Pretende registar esta decisão para o agendamento selecionado? A decisão pode ser revertida com o botão "Rever decisão".'
+            : dialog?.kind === 'concluir'
+              ? todosRejeitados
+                ? 'Todos os agendamentos estão rejeitados — concluir irá rejeitar a atividade inteira (mesmo resultado do "Rejeitar atividade"). O comentário é obrigatório e a conclusão não pode ser desfeita.'
+                : 'Pretende concluir esta etapa do fluxo de aprovação? O comentário/parecer é obrigatório e a conclusão não pode ser desfeita.'
+              : 'Pretende rejeitar toda a atividade? O fluxo será interrompido imediatamente, todos os agendamentos marcados como rejeitados e a justificação é obrigatória.'
+        }
+        confirmLabel={
+          dialog?.kind === 'voto'
+            ? (dialog.decisao === 'aprovar' ? 'Aprovar' : 'Rejeitar')
+            : dialog?.kind === 'concluir'
+              ? 'Concluir'
+              : 'Rejeitar Atividade'
+        }
+        variant={dialog?.kind === 'rejeitar' || (dialog?.kind === 'voto' && dialog.decisao === 'rejeitar') || (dialog?.kind === 'concluir' && todosRejeitados) ? 'destructive' : 'default'}
+        onConfirm={confirmarDialog}
       />
     </div>
   );

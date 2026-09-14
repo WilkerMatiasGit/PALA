@@ -30,6 +30,18 @@ export interface ActividadeUpsert {
   tipo: ActividadeTipo;
 }
 
+export type ActividadeDetalhesPayload =
+  | { curso_disciplina_id: number; tema: string; turno: string; numero_turma: number }
+  | { nome_visitante: string; instituicao?: string; telefone: string; email: string }
+  | { responsavel_id: number; titulo: string; descricao: string; data_inicio: string; data_fim: string }
+  | { responsavel_id: number; estudante_id: number; data_inicio: string; data_fim: string };
+
+export interface ActividadeFullUpsert extends ActividadeUpsert {
+  detalhes?: ActividadeDetalhesPayload;
+  agendamentos?: { hora_inicio: string; hora_fim: string }[];
+  materiais?: { material_id: number; quantidade_estimada: number }[];
+}
+
 export interface AulaGet {
   id: number;
   actividade_id: number;
@@ -37,6 +49,9 @@ export interface AulaGet {
   curso_disciplina_id: number;
   curso_disciplina_nome: string;
   tema: string;
+  turno?: 'manha' | 'tarde' | null;
+  numero_turma?: number | null;
+  turma: string;
   criado_em: string;
   actualizado_em: string;
 }
@@ -46,6 +61,8 @@ export interface AulaUpsert {
   actividade_id: number;
   curso_disciplina_id: number;
   tema: string;
+  turno?: 'manha' | 'tarde' | null;
+  numero_turma?: number | null;
 }
 
 export interface VisitaGet {

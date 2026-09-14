@@ -1,100 +1,124 @@
 import { Router } from 'express';
-import { getDb, genId, persist } from '../db.js';
+import { prisma } from '../db.js';
 import { authRequired, rbac } from '../middleware/auth.js';
+import { toRelatorioGet } from '../utils/dto.js';
 
 const router = Router();
 router.use(authRequired);
 
-function buildDados(labId, mes, ano) {
-  const db = getDb();
-  const acts = db.actividades.filter(
-    (a) => a.laboratorio_id === labId && a.activo !== false && a.estado === 'aprovado_supervisor'
-  );
-  const actsNoMes = acts.filter((a) => {
-    const d = new Date(a.criado_em);
-    return d.getMonth() + 1 === mes && d.getFullYear() === ano;
-  });
-  const realizados = db.agendamentos.filter((g) => {
-    if (g.activo === false || !g.realizado) return false;
-    const act = db.actividades.find((x) => x.id === g.actividade_id);
-    if (!act || act.laboratorio_id !== labId) return false;
-    const d = new Date(g.hora_inicio);
-    return d.getMonth() + 1 === mes && d.getFullYear() === ano;
+async function buildDados(labId, mes, ano) {
+  const start = new Date(ano, mes - 1, 1);
+  const end = new Date(ano, mes, 1);
+
+  // RF19: COUNT de agendamentos reais (realizados) no mês e as atividades distintas às quais pertencem.
+  const realizados = await prisma.agendamento.findMany({
+    where: {
+      activo: true,
+      realizado: true,
+      hora_inicio: { gte: start, lt: end },
+      actividade: { laboratorio_id: labId, activo: true },
+    },
+    select: { id: true, actividade: { select: { id: true, tipo: true } } },
   });
 
-  const contagem = (tipo) => actsNoMes.filter((a) => a.tipo === tipo).length;
-  // Baixa de materiais: soma das movimentações de consumo das atividades aprovadas do lab no mês
-  const ids = new Set(actsNoMes.map((a) => a.id));
-  const baixas = db.historico
-    .filter((h) => h.motivo === 'consumo_actividade' && h.actividade_id && ids.has(h.actividade_id))
-    .reduce((sum, h) => sum + Math.abs(Number(h.quantidade_movimentada || 0)), 0);
+  const actIds = [...new Set(realizados.map((g) => g.actividade?.id ?? g.actividade_id))];
+  const contagemPorTipo = {};
+  for (const g of realizados) {
+    const tipo = g.actividade?.tipo;
+    contagemPorTipo[tipo] = (contagemPorTipo[tipo] ?? 0) + 1;
+  }
+
+  let baixas = 0;
+  if (actIds.length > 0) {
+    const agg = await prisma.historicoMaterial.aggregate({
+      _sum: { quantidade_movimentada: true },
+      where: { activo: true, motivo: 'consumo_actividade', actividade_id: { in: actIds } },
+    });
+    baixas = Math.abs(agg._sum.quantidade_movimentada ?? 0);
+  }
+
+  const porTipo = ['aula', 'visita', 'projecto', 'estagio'].map((tipo) => ({
+    tipo,
+    count: contagemPorTipo[tipo] ?? 0,
+  }));
 
   return {
-    total_actividades: actsNoMes.length,
+    total_actividades: actIds.length,
     total_realizadas: realizados.length,
     total_materiais_baixados: baixas,
-    por_tipo: [
-      { tipo: 'aula', count: contagem('aula') },
-      { tipo: 'visita', count: contagem('visita') },
-      { tipo: 'projecto', count: contagem('projecto') },
-      { tipo: 'estagio', count: contagem('estagio') },
-    ],
-    por_lab: [{ lab: '', count: actsNoMes.length }],
+    por_tipo: porTipo,
+    por_lab: [{ lab: '', count: actIds.length }],
   };
 }
 
 // GET /relatorios — listar [A,T,C,S,CD]
-router.get('/', rbac('admin', 'tecnico', 'coordenador_dlab', 'supervisor', 'chefe_departamento'), (req, res) => {
-  const db = getDb();
-  res.json(db.relatorios.filter((r) => r.activo !== false));
+router.get('/', rbac('admin', 'tecnico', 'coordenador_dlab', 'supervisor', 'chefe_departamento'), async (req, res, next) => {
+  try {
+    const rows = await prisma.relatorio.findMany({
+      where: { activo: true },
+      include: { laboratorio: true, criadoPor: true },
+      orderBy: { id: 'asc' },
+    });
+    res.json(rows.map(toRelatorioGet));
+  } catch (err) {
+    next(err);
+  }
 });
 
 // GET /relatorios/:id/pdf — exportar [A,T,C,S,CD]
-router.get('/:id/pdf', rbac('admin', 'tecnico', 'coordenador_dlab', 'supervisor', 'chefe_departamento'), (req, res) => {
-  const db = getDb();
-  const r = db.relatorios.find((x) => x.id === Number(req.params.id) && x.activo !== false);
-  if (!r) return res.status(404).json({ message: 'Relatório não encontrado' });
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename="relatorio-${r.mes}-${r.ano}.pdf"`);
-  res.send(buildMinimalPdf(`Relatório DLab ${r.mes}/${r.ano}`, r.dados_json));
+router.get('/:id/pdf', rbac('admin', 'tecnico', 'coordenador_dlab', 'supervisor', 'chefe_departamento'), async (req, res, next) => {
+  try {
+    const r = await prisma.relatorio.findFirst({ where: { id: Number(req.params.id), activo: true } });
+    if (!r) return res.status(404).json({ message: 'Relatório não encontrado' });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="relatorio-${r.mes}-${r.ano}.pdf"`);
+    res.send(buildMinimalPdf(`Relatório DLab ${r.mes}/${r.ano}`, r.dados_json));
+  } catch (err) {
+    next(err);
+  }
 });
 
 // GET /relatorios/:id
-router.get('/:id', rbac('admin', 'tecnico', 'coordenador_dlab', 'supervisor', 'chefe_departamento'), (req, res) => {
-  const db = getDb();
-  const r = db.relatorios.find((x) => x.id === Number(req.params.id) && x.activo !== false);
-  if (!r) return res.status(404).json({ message: 'Relatório não encontrado' });
-  res.json(r);
+router.get('/:id', rbac('admin', 'tecnico', 'coordenador_dlab', 'supervisor', 'chefe_departamento'), async (req, res, next) => {
+  try {
+    const r = await prisma.relatorio.findFirst({
+      where: { id: Number(req.params.id), activo: true },
+      include: { laboratorio: true, criadoPor: true },
+    });
+    if (!r) return res.status(404).json({ message: 'Relatório não encontrado' });
+    res.json(toRelatorioGet(r));
+  } catch (err) {
+    next(err);
+  }
 });
 
-// POST /relatorios — gerar [A,T] (Rf19)
-router.post('/', rbac('admin', 'tecnico'), (req, res) => {
-  const { laboratorio_id, mes, ano } = req.body || {};
-  if (!laboratorio_id || !mes || !ano) {
-    return res.status(400).json({ message: 'laboratorio_id, mes e ano são obrigatórios' });
+// POST /relatorios — gerar [A,T] (RF19)
+router.post('/', rbac('admin', 'tecnico'), async (req, res, next) => {
+  try {
+    const { laboratorio_id, mes, ano } = req.body || {};
+    if (!laboratorio_id || !mes || !ano) {
+      return res.status(400).json({ message: 'laboratorio_id, mes e ano são obrigatórios' });
+    }
+    const lab = await prisma.laboratorio.findFirst({ where: { id: Number(laboratorio_id), activo: true } });
+    if (!lab) return res.status(404).json({ message: 'Laboratório não encontrado' });
+
+    const dados = await buildDados(Number(laboratorio_id), Number(mes), Number(ano));
+    dados.por_lab = [{ lab: lab.nome, count: dados.total_actividades }];
+
+    const novo = await prisma.relatorio.create({
+      data: {
+        laboratorio_id: Number(laboratorio_id),
+        criado_por: req.user.id,
+        mes: Number(mes),
+        ano: Number(ano),
+        dados_json: JSON.stringify(dados),
+      },
+      include: { laboratorio: true, criadoPor: true },
+    });
+    res.status(201).json(toRelatorioGet(novo));
+  } catch (err) {
+    next(err);
   }
-  const db = getDb();
-  const lab = db.laboratorios.find((l) => l.id === Number(laboratorio_id));
-  if (!lab) return res.status(404).json({ message: 'Laboratório não encontrado' });
-  const now = new Date().toISOString();
-  const dados = buildDados(Number(laboratorio_id), Number(mes), Number(ano));
-  dados.por_lab = [{ lab: lab.nome, count: dados.total_actividades }];
-  const novo = {
-    id: genId(),
-    laboratorio_id: Number(laboratorio_id),
-    laboratorio_nome: lab.nome,
-    criado_por: req.user.id,
-    criado_por_nome: req.user.nome,
-    mes: Number(mes),
-    ano: Number(ano),
-    dados_json: JSON.stringify(dados),
-    activo: true,
-    criado_em: now,
-    actualizado_em: now,
-  };
-  db.relatorios.push(novo);
-  persist();
-  res.status(201).json(novo);
 });
 
 // Gera um PDF mínimo válido (sem dependências externas) — suficiente para exportação simples.

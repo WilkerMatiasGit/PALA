@@ -27,10 +27,17 @@ export default function AprovacoesList() {
 
   useEffect(() => { load(); }, [user?.tipo]);
 
-  const title = user?.tipo === 'supervisor' ? 'Fila de Aprovação - Supervisor' : 'Fila de Aprovação - Coordenador DLab';
-  const description = user?.tipo === 'supervisor'
-    ? 'Actividades aprovadas pelo DLab que aguardam a sua validação final.'
-    : 'Actividades pendentes que aguardam a sua validação técnica.';
+  const isAdmin = user?.tipo === 'admin';
+  const title = isAdmin
+    ? 'Fila de Aprovação - Admin'
+    : user?.tipo === 'supervisor'
+      ? 'Fila de Aprovação - Supervisor'
+      : 'Fila de Aprovação - Coordenador DLab';
+  const description = isAdmin
+    ? 'Actividades pendentes (revisão DLab) e aprovadas pelo DLab (revisão Supervisor) que aguardam decisão.'
+    : user?.tipo === 'supervisor'
+      ? 'Actividades aprovadas pelo DLab que aguardam a sua validação final.'
+      : 'Actividades pendentes que aguardam a sua validação técnica.';
 
   return (
     <div>

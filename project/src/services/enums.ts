@@ -14,6 +14,13 @@ export type ActividadeTipo = 'aula' | 'visita' | 'projecto' | 'estagio';
 
 export type ActividadeEstado =
   | 'pendente'
+  | 'revisado_dlab'
+  | 'revisado_supervisor'
+  | 'rejeitado';
+
+export type AgendamentoEstado =
+  | 'nao_revisto'
+  | 'pendente'
   | 'aprovado_dlab'
   | 'aprovado_supervisor'
   | 'rejeitado';
@@ -42,6 +49,8 @@ export type MovimentacaoMotivo =
   | 'outro';
 
 export type TecnicoTipo = 'validador' | 'assistente';
+
+export type TurnoTipo = 'manha' | 'tarde';
 
 export const UTILIZADOR_TIPO_LABELS: Record<UtilizadorTipo, string> = {
   admin: 'Administrador',
@@ -82,6 +91,14 @@ export const ACTIVIDADE_TIPO_LABELS: Record<ActividadeTipo, string> = {
 };
 
 export const ACTIVIDADE_ESTADO_LABELS: Record<ActividadeEstado, string> = {
+  pendente: 'Pendente',
+  revisado_dlab: 'Revisto DLab',
+  revisado_supervisor: 'Revisto',
+  rejeitado: 'Rejeitado',
+};
+
+export const AGENDAMENTO_ESTADO_LABELS: Record<AgendamentoEstado, string> = {
+  nao_revisto: 'Não revisto',
   pendente: 'Pendente',
   aprovado_dlab: 'Aprovado DLab',
   aprovado_supervisor: 'Aprovado',
@@ -124,6 +141,15 @@ export const TECNICO_TIPO_LABELS: Record<TecnicoTipo, string> = {
   validador: 'Validador',
   assistente: 'Assistente',
 };
+
+export const TURNO_TIPO_LABELS: Record<TurnoTipo, string> = {
+  manha: 'Manhã',
+  tarde: 'Tarde',
+};
+
+export const TURNO_TIPO_OPTIONS = Object.entries(TURNO_TIPO_LABELS).map(
+  ([value, label]) => ({ value, label }),
+);
 
 export const UTILIZADOR_TIPO_OPTIONS = Object.entries(
   UTILIZADOR_TIPO_LABELS

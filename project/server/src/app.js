@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { initDb } from './db.js';
+import { prisma } from './db.js';
 import authRouter from './modules/auth.routes.js';
 import utilizadoresRouter from './modules/utilizadores.routes.js';
 import laboratoriosRouter from './modules/laboratorios.routes.js';
@@ -13,14 +13,11 @@ import agendamentosRouter from './modules/agendamentos.routes.js';
 import aprovacoesFilaRouter, { historico as aprovacoesHistoricoRouter } from './modules/aprovacoes.routes.js';
 import relatoriosRouter from './modules/relatorios.routes.js';
 import { authRequired } from './middleware/auth.js';
-import { getDb } from './db.js';
 
 const app = express();
 
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
-
-initDb();
 
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
@@ -46,23 +43,45 @@ app.use('/agendamentos', agendamentosRouter);
 app.use('/aprovacoes', aprovacoesFilaRouter);
 app.use('/relatorios', relatoriosRouter);
 
-// Calendário (RF12) — ocupação mensal só aprovado_supervisor
-app.get('/calendario', authRequired, (req, res) => {
-  const db = getDb();
-  let result = db.agendamentos.filter((g) => {
-    const act = db.actividades.find((a) => a.id === g.actividade_id && a.activo !== false);
-    return act && act.estado === 'aprovado_supervisor' && g.activo !== false;
-  });
-  if (req.query.laboratorio_id) result = result.filter((g) => g.laboratorio_id === Number(req.query.laboratorio_id));
-  if (req.query.mes && req.query.ano) {
-    const mes = Number(req.query.mes);
-    const ano = Number(req.query.ano);
-    result = result.filter((g) => {
-      const d = new Date(g.hora_inicio);
-      return d.getMonth() + 1 === mes && d.getFullYear() === ano;
+// Calendário (RF12) — ocupação mensal só de agendamentos aprovado_supervisor
+app.get('/calendario', authRequired, async (req, res, next) => {
+  try {
+    const where = {
+      activo: true,
+      estado: 'aprovado_supervisor',
+      actividade: { activo: true },
+    };
+    if (req.query.laboratorio_id) where.actividade.laboratorio_id = Number(req.query.laboratorio_id);
+    if (req.query.mes && req.query.ano) {
+      const mes = Number(req.query.mes);
+      const ano = Number(req.query.ano);
+      where.hora_inicio = { gte: new Date(ano, mes - 1, 1), lt: new Date(ano, mes, 1) };
+    }
+    const rows = await prisma.agendamento.findMany({
+      where,
+      include: { actividade: { include: { laboratorio: true } } },
+      orderBy: { id: 'asc' },
     });
+    res.json(
+      rows.map((g) => ({
+        id: g.id,
+        actividade_id: g.actividade_id,
+        actividade_nome: g.actividade?.nome ?? '',
+        laboratorio_id: g.actividade?.laboratorio_id,
+        laboratorio_nome: g.actividade?.laboratorio?.nome ?? '',
+        hora_inicio: g.hora_inicio,
+        hora_fim: g.hora_fim,
+        confirmado_professor_em: g.confirmado_professor_em,
+        confirmado_tecnico_em: g.confirmado_tecnico_em,
+        realizado: g.realizado,
+        estado: g.estado,
+        criado_em: g.criado_em,
+        actualizado_em: g.actualizado_em,
+      }))
+    );
+  } catch (err) {
+    next(err);
   }
-  res.json(result);
 });
 
 // 404 para rotas desconhecidas

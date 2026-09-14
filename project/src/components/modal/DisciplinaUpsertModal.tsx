@@ -47,8 +47,8 @@ export function DisciplinaUpsertModal({ open, onOpenChange, disciplina, onSaved 
       }
       onSaved();
       onOpenChange(false);
-    } catch {
-      toast.error('Erro ao guardar disciplina');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao guardar disciplina');
     } finally {
       setSaving(false);
     }

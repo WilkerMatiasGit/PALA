@@ -53,8 +53,8 @@ export function CursoUpsertModal({ open, onOpenChange, curso, onSaved }: Props) 
       }
       onSaved();
       onOpenChange(false);
-    } catch {
-      toast.error('Erro ao guardar curso');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao guardar curso');
     } finally {
       setSaving(false);
     }
