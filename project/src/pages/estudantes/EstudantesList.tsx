@@ -21,7 +21,7 @@ import { Plus, Pencil, Trash2, Users } from 'lucide-react';
 
 export default function EstudantesList() {
   const { user } = useAuth();
-  const canEdit = hasRole(user?.tipo, ['admin', 'professor', 'coordenador_dlab', 'supervisor', 'chefe_departamento']);
+  const canEdit = hasRole(user?.tipo, ['admin', 'coordenador_dlab', 'supervisor', 'chefe_departamento']);
   const [data, setData] = useState<EstudanteGet[]>([]);
   const [cursos, setCursos] = useState<CursoGet[]>([]);
   const [loading, setLoading] = useState(true);

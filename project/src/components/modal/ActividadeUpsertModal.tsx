@@ -17,7 +17,7 @@ import { utilizadoresService } from '@/services/utilizadores.service';
 import { cursosService } from '@/services/cursos.service';
 import { materiaisService } from '@/services/materiais.service';
 import { agendamentosService } from '@/services/agendamentos.service';
-import { ACTIVIDADE_TIPO_OPTIONS } from '@/services/enums';
+import { ACTIVIDADE_TIPO_OPTIONS, TURNO_TIPO_OPTIONS } from '@/services/enums';
 import type { ActividadeGet, ActividadeUpsert, ActividadeFullUpsert } from '@/types/actividade.types';
 import type { LaboratorioGet } from '@/types/laboratorio.types';
 import type { UtilizadorGet } from '@/types/utilizador.types';
@@ -27,6 +27,7 @@ import type { AgendamentoGet } from '@/types/agendamento.types';
 import type { EstudanteGet } from '@/types/estudantes.types';
 import type { ActividadeTipo } from '@/services/enums';
 import { useAuth } from '@/context/AuthContext';
+import { semestreToAno, semestreNoAno } from '@/utils/constants';
 import { Plus, Trash2, ChevronRight, ChevronLeft, ClipboardList } from 'lucide-react';
 
 interface Props {
@@ -80,6 +81,8 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
   // Aula
   const [cursoDisciplinaId, setCursoDisciplinaId] = useState('');
   const [tema, setTema] = useState('');
+  const [turno, setTurno] = useState('');
+  const [numeroTurma, setNumeroTurma] = useState('');
   // Visita
   const [nomeVisitante, setNomeVisitante] = useState('');
   const [instituicao, setInstituicao] = useState('');
@@ -122,7 +125,7 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
     setStep(1);
     setNome(''); setLabId(''); setTipo('aula'); setNumParticipantes('1');
     setPrecisaAssistente(false); setObservacoes('');
-    setCursoDisciplinaId(''); setTema('');
+    setCursoDisciplinaId(''); setTema(''); setTurno(''); setNumeroTurma('');
     setNomeVisitante(''); setInstituicao(''); setTelefone(''); setEmailVisitante('');
     setResponsavelId(''); setTitulo(''); setDescricao(''); setDataInicio(''); setDataFim(''); setEstudanteId('');
     setAgendamentos([{ data: '', hora_inicio: '', hora_fim: '' }]);
@@ -223,7 +226,7 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
 
       const detalhes =
         tipo === 'aula'
-          ? { curso_disciplina_id: Number(cursoDisciplinaId), tema }
+          ? { curso_disciplina_id: Number(cursoDisciplinaId), tema, turno, numero_turma: Number(numeroTurma) }
           : tipo === 'visita'
             ? { nome_visitante: nomeVisitante, telefone, email: emailVisitante, ...(instituicao ? { instituicao } : {}) }
             : tipo === 'projecto'
@@ -257,6 +260,12 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
   };
 
   const stepLabels = ['Dados Base', 'Detalhes', 'Agendamentos', 'Materiais'];
+
+  const selectedCd = cursoDisciplinas.find((cd) => String(cd.id) === cursoDisciplinaId);
+  const aulaAno = selectedCd ? semestreToAno(selectedCd.semestre) : null;
+  const turmaPreview = selectedCd && turno && numeroTurma && Number(numeroTurma) > 0
+    ? `${selectedCd.curso_abreviacao}_${turno === 'manha' ? 'M' : 'T'}${numeroTurma}`
+    : '';
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -327,9 +336,34 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
                   <Label>Disciplina (Curso-Disciplina)</Label>
                   <Select value={cursoDisciplinaId} onValueChange={setCursoDisciplinaId}>
                     <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
-                    <SelectContent>{cursoDisciplinas.map((cd) => <SelectItem key={cd.id} value={String(cd.id)}>{cd.disciplina_nome} ({cd.curso_nome} - {cd.semestre}º Sem)</SelectItem>)}</SelectContent>
+                    <SelectContent>{cursoDisciplinas.map((cd) => <SelectItem key={cd.id} value={String(cd.id)}>{cd.disciplina_nome} ({cd.curso_nome} - {semestreToAno(cd.semestre)}º Ano · {semestreNoAno(cd.semestre)}º Sem)</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
+                {aulaAno != null && (
+                  <div className="space-y-2">
+                    <Label>Ano letivo</Label>
+                    <div className="rounded-md border px-3 py-2 text-sm text-muted-foreground">{aulaAno}º Ano</div>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Turno</Label>
+                    <Select value={turno} onValueChange={setTurno}>
+                      <SelectTrigger><SelectValue placeholder="Selecionar turno..." /></SelectTrigger>
+                      <SelectContent>{TURNO_TIPO_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="num-turma">Nº da turma</Label>
+                    <Input id="num-turma" type="number" min={1} value={numeroTurma} onChange={(e) => setNumeroTurma(e.target.value)} placeholder="Ex: 1" />
+                  </div>
+                </div>
+                {turmaPreview && (
+                  <div className="space-y-2">
+                    <Label>Turma (gerada)</Label>
+                    <div className="rounded-md border px-3 py-2 font-mono text-sm text-primary">{turmaPreview}</div>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="tema">Tema</Label>
                   <Input id="tema" value={tema} onChange={(e) => setTema(e.target.value)} />

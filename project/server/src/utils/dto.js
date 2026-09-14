@@ -49,6 +49,7 @@ export function toCursoDisciplinaGet(cd) {
     id: cd.id,
     curso_id: cd.curso_id,
     curso_nome: cd.curso?.nome ?? '',
+    curso_abreviacao: cd.curso?.abreviacao ?? '',
     disciplina_id: cd.disciplina_id,
     disciplina_nome: cd.disciplina?.nome ?? '',
     semestre: cd.semestre,
@@ -129,6 +130,10 @@ export function toActividadeGet(a) {
 // Recebe Aula com include { curso_disciplina: { curso, disciplina } }
 export function toAulaGet(aula) {
   const cd = aula.curso_disciplina;
+  const abreviacao = cd?.curso?.abreviacao ?? '';
+  const turma = aula.turno && aula.numero_turma != null
+    ? `${abreviacao}_${aula.turno === 'manha' ? 'M' : 'T'}${aula.numero_turma}`
+    : '';
   return {
     id: aula.id,
     actividade_id: aula.actividade_id,
@@ -137,6 +142,9 @@ export function toAulaGet(aula) {
       ? `${cd.disciplina?.nome ?? ''} (${cd.curso?.nome ?? ''} - ${cd.semestre}º Sem)`
       : '',
     tema: aula.tema ?? '',
+    turno: aula.turno,
+    numero_turma: aula.numero_turma,
+    turma,
     criado_em: aula.criado_em,
     actualizado_em: aula.actualizado_em,
   };

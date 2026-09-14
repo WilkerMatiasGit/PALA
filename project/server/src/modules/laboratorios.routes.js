@@ -16,8 +16,8 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// GET /labs/:id
-router.get('/:id', async (req, res, next) => {
+// GET /labs/:id — [A,T,C,S,CD] (professor vê só a lista, sem drill-down de materiais)
+router.get('/:id', rbac('admin', 'tecnico', 'coordenador_dlab', 'supervisor', 'chefe_departamento'), async (req, res, next) => {
   try {
     const l = await prisma.laboratorio.findFirst({ where: { id: Number(req.params.id), activo: true } });
     if (!l) return res.status(404).json({ message: 'Laboratório não encontrado' });

@@ -7,11 +7,13 @@ import { toMaterialGet, toHistoricoGet } from '../utils/dto.js';
 const router = Router();
 router.use(authRequired);
 
+const MAT_ROLES = ['admin', 'tecnico', 'coordenador_dlab', 'supervisor', 'chefe_departamento']; // professor SEM acesso a materiais
+
 const materialInclude = { laboratorio: true };
 const historicoInclude = { material: true, utilizador: true, actividade: true };
 
-// GET /materiais — listar (filtros laboratorio_id, categoria, estado)
-router.get('/', async (req, res, next) => {
+// GET /materiais — listar (filtros laboratorio_id, categoria, estado)  [A,T,C,S,CD]
+router.get('/', rbac(...MAT_ROLES), async (req, res, next) => {
   try {
     const where = { activo: true };
     if (req.query.laboratorio_id) where.laboratorio_id = Number(req.query.laboratorio_id);
@@ -24,8 +26,8 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// GET /materiais/historico — movimentações (definir antes de /:id)
-router.get('/historico', async (req, res, next) => {
+// GET /materiais/historico — movimentações (definir antes de /:id)  [A,T,C,S,CD]
+router.get('/historico', rbac(...MAT_ROLES), async (req, res, next) => {
   try {
     const where = { activo: true };
     if (req.query.material_id) where.material_id = Number(req.query.material_id);
@@ -65,8 +67,8 @@ router.post('/historico', rbac('admin', 'tecnico', 'supervisor', 'chefe_departam
   }
 });
 
-// GET /materiais/:id/historico — movimentações de um material
-router.get('/:id/historico', async (req, res, next) => {
+// GET /materiais/:id/historico — movimentações de um material  [A,T,C,S,CD]
+router.get('/:id/historico', rbac(...MAT_ROLES), async (req, res, next) => {
   try {
     const rows = await prisma.historicoMaterial.findMany({
       where: { material_id: Number(req.params.id), activo: true },
@@ -79,8 +81,8 @@ router.get('/:id/historico', async (req, res, next) => {
   }
 });
 
-// GET /materiais/:id
-router.get('/:id', async (req, res, next) => {
+// GET /materiais/:id  [A,T,C,S,CD]
+router.get('/:id', rbac(...MAT_ROLES), async (req, res, next) => {
   try {
     const m = await prisma.material.findFirst({ where: { id: Number(req.params.id), activo: true }, include: materialInclude });
     if (!m) return res.status(404).json({ message: 'Material não encontrado' });

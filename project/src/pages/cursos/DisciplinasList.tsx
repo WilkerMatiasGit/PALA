@@ -11,12 +11,12 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { DisciplinaUpsertModal } from '@/components/modal/DisciplinaUpsertModal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
 import { cursosService } from '@/services/cursos.service';
 import { useAuth } from '@/context/AuthContext';
 import { hasRole } from '@/utils/roleGuard';
 import type { DisciplinaGet, CursoDisciplinaGet } from '@/types/disciplina.types';
 import type { CursoGet } from '@/types/curso.types';
+import { semestreToAno, semestreNoAno, anoSemestreToSemestre } from '@/utils/constants';
 import { Plus, Pencil, Trash2, BookOpen, Link2 } from 'lucide-react';
 
 export default function DisciplinasList() {
@@ -34,7 +34,8 @@ export default function DisciplinasList() {
   // Association form
   const [assocCurso, setAssocCurso] = useState('');
   const [assocDisciplina, setAssocDisciplina] = useState('');
-  const [assocSemestre, setAssocSemestre] = useState('1');
+  const [assocAno, setAssocAno] = useState('1');
+  const [assocSemNoAno, setAssocSemNoAno] = useState('1');
 
   const load = () => {
     setLoading(true); setError(false);
@@ -59,10 +60,10 @@ export default function DisciplinasList() {
       await cursosService.createCursoDisciplina({
         curso_id: Number(assocCurso),
         disciplina_id: Number(assocDisciplina),
-        semestre: Number(assocSemestre),
+        semestre: anoSemestreToSemestre(Number(assocAno), Number(assocSemNoAno)),
       });
       toast.success('Disciplina associada ao curso');
-      setAssocCurso(''); setAssocDisciplina(''); setAssocSemestre('1');
+      setAssocCurso(''); setAssocDisciplina(''); setAssocAno('1'); setAssocSemNoAno('1');
       load();
     } catch {
       toast.error('Erro ao associar');
@@ -131,8 +132,23 @@ export default function DisciplinasList() {
                 </Select>
               </div>
               <div className="space-y-1">
+                <Label className="text-xs">Ano</Label>
+                <Select value={assocAno} onValueChange={setAssocAno}>
+                  <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {[1,2,3,4,5].map((n) => <SelectItem key={n} value={String(n)}>{n}º</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
                 <Label className="text-xs">Semestre</Label>
-                <Input type="number" min={1} max={10} className="w-20" value={assocSemestre} onChange={(e) => setAssocSemestre(e.target.value)} />
+                <Select value={assocSemNoAno} onValueChange={setAssocSemNoAno}>
+                  <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1º</SelectItem>
+                    <SelectItem value="2">2º</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <Button onClick={handleAssociate}><Plus className="mr-2 h-4 w-4" /> Associar</Button>
             </div>
@@ -144,7 +160,7 @@ export default function DisciplinasList() {
                     <TableRow>
                       <TableHead>Curso</TableHead>
                       <TableHead>Disciplina</TableHead>
-                      <TableHead>Semestre</TableHead>
+                      <TableHead>Ano · Sem</TableHead>
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -153,7 +169,7 @@ export default function DisciplinasList() {
                       <TableRow key={cd.id}>
                         <TableCell>{cd.curso_nome}</TableCell>
                         <TableCell>{cd.disciplina_nome}</TableCell>
-                        <TableCell>{cd.semestre}º</TableCell>
+                        <TableCell>{semestreToAno(cd.semestre)}º Ano · {semestreNoAno(cd.semestre)}º Sem</TableCell>
                         <TableCell className="text-right">
                           <Button variant="ghost" size="icon" onClick={() => { cursosService.removeCursoDisciplina(cd.id).then(() => { toast.success('Associação removida'); load(); }); }}>
                             <Trash2 className="h-4 w-4 text-destructive" />

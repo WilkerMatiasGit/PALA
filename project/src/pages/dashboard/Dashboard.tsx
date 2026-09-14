@@ -25,14 +25,20 @@ export default function Dashboard() {
   const load = () => {
     setLoading(true);
     setError(false);
+    // Professor não tem acesso a materiais (403) → não faz essa chamada.
+    const isProf = user?.tipo === 'professor';
     Promise.all([
       actividadesService.list(),
-      materiaisService.list(),
       agendamentosService.list(),
-    ]).then(([acts, mats, ags]) => {
+      isProf ? Promise.resolve([] as MaterialGet[]) : materiaisService.list(),
+    ]).then(([acts, ags, mats]) => {
       setActividades(acts);
       setMateriais(mats);
-      setAgendamentos(ags);
+      // Professor/Técnico só veem os agendamentos das atividades em que estão envolvidos
+      // (o backend já filtra a lista de atividades; aqui filtramos a de agendamentos).
+      const limited = user?.tipo === 'professor' || user?.tipo === 'tecnico';
+      const ids = new Set(acts.map((a) => a.id));
+      setAgendamentos(limited ? ags.filter((g) => ids.has(g.actividade_id)) : ags);
     }).catch(() => setError(true)).finally(() => setLoading(false));
   };
 
@@ -63,7 +69,7 @@ export default function Dashboard() {
           </div>
 
           <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <ActividadesPendentesWidget actividades={actividades} loading={loading} />
+            <ActividadesPendentesWidget actividades={actividades} loading={loading} hideViewAll={user?.tipo === 'professor'} />
             <StockAlertsWidget materiais={materiais} loading={loading} />
           </div>
 

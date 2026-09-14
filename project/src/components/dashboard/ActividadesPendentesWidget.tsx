@@ -6,7 +6,7 @@ import { formatEstado } from '@/utils/formatEstado';
 import type { ActividadeGet } from '@/types/actividade.types';
 import { ClipboardList, ChevronRight } from 'lucide-react';
 
-export function ActividadesPendentesWidget({ actividades, loading }: { actividades: ActividadeGet[]; loading: boolean }) {
+export function ActividadesPendentesWidget({ actividades, loading, hideViewAll = false }: { actividades: ActividadeGet[]; loading: boolean; hideViewAll?: boolean }) {
   const navigate = useNavigate();
   const pendentes = actividades.filter(
     (a) => a.estado === 'pendente' || a.estado === 'revisado_dlab'
@@ -16,9 +16,11 @@ export function ActividadesPendentesWidget({ actividades, loading }: { actividad
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-base">Actividades Pendentes</CardTitle>
-        <button onClick={() => navigate('/aprovacoes')} className="text-xs text-primary hover:underline">
-          Ver todas
-        </button>
+        {!hideViewAll && (
+          <button onClick={() => navigate('/aprovacoes')} className="text-xs text-primary hover:underline">
+            Ver todas
+          </button>
+        )}
       </CardHeader>
       <CardContent>
         {loading ? (

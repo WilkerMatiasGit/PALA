@@ -44,7 +44,7 @@ function AppRoutes() {
       <Route path="/perfil" element={<ProtectedRoute><AppShell><Suspense fallback={<FullPageSpinner />}><Perfil /></Suspense></AppShell></ProtectedRoute>} />
       <Route path="/users" element={<ProtectedRoute allowedRoles={['admin']}><AppShell><Suspense fallback={<FullPageSpinner />}><UtilizadoresList /></Suspense></AppShell></ProtectedRoute>} />
       <Route path="/labs" element={<ProtectedRoute><AppShell><Suspense fallback={<FullPageSpinner />}><LaboratoriosList /></Suspense></AppShell></ProtectedRoute>} />
-      <Route path="/labs/:id" element={<ProtectedRoute><AppShell><Suspense fallback={<FullPageSpinner />}><LaboratorioDetalhe /></Suspense></AppShell></ProtectedRoute>} />
+      <Route path="/labs/:id" element={<ProtectedRoute allowedRoles={['admin','tecnico','coordenador_dlab','supervisor','chefe_departamento']}><AppShell><Suspense fallback={<FullPageSpinner />}><LaboratorioDetalhe /></Suspense></AppShell></ProtectedRoute>} />
       <Route path="/cursos" element={<ProtectedRoute><AppShell><Suspense fallback={<FullPageSpinner />}><CursosList /></Suspense></AppShell></ProtectedRoute>} />
       <Route path="/disciplinas" element={<ProtectedRoute><AppShell><Suspense fallback={<FullPageSpinner />}><DisciplinasList /></Suspense></AppShell></ProtectedRoute>} />
       <Route path="/estudantes" element={<ProtectedRoute><AppShell><Suspense fallback={<FullPageSpinner />}><EstudantesList /></Suspense></AppShell></ProtectedRoute>} />
@@ -53,9 +53,9 @@ function AppRoutes() {
       <Route path="/aprovacoes" element={<ProtectedRoute allowedRoles={['admin','coordenador_dlab','supervisor','chefe_departamento']}><AppShell><Suspense fallback={<FullPageSpinner />}><AprovacoesList /></Suspense></AppShell></ProtectedRoute>} />
       <Route path="/aprovacoes/:id" element={<ProtectedRoute allowedRoles={['admin','coordenador_dlab','supervisor']}><AppShell><Suspense fallback={<FullPageSpinner />}><AprovacaoDetalhe /></Suspense></AppShell></ProtectedRoute>} />
       <Route path="/calendario" element={<ProtectedRoute><AppShell><Suspense fallback={<FullPageSpinner />}><Calendario /></Suspense></AppShell></ProtectedRoute>} />
-      <Route path="/materiais" element={<ProtectedRoute><AppShell><Suspense fallback={<FullPageSpinner />}><MateriaisList /></Suspense></AppShell></ProtectedRoute>} />
-      <Route path="/materiais/historico" element={<ProtectedRoute><AppShell><Suspense fallback={<FullPageSpinner />}><MateriaisHistoricoList /></Suspense></AppShell></ProtectedRoute>} />
-      <Route path="/materiais/:id" element={<ProtectedRoute><AppShell><Suspense fallback={<FullPageSpinner />}><MaterialDetalhe /></Suspense></AppShell></ProtectedRoute>} />
+      <Route path="/materiais" element={<ProtectedRoute allowedRoles={['admin','tecnico','coordenador_dlab','supervisor','chefe_departamento']}><AppShell><Suspense fallback={<FullPageSpinner />}><MateriaisList /></Suspense></AppShell></ProtectedRoute>} />
+      <Route path="/materiais/historico" element={<ProtectedRoute allowedRoles={['admin','tecnico','supervisor','chefe_departamento']}><AppShell><Suspense fallback={<FullPageSpinner />}><MateriaisHistoricoList /></Suspense></AppShell></ProtectedRoute>} />
+      <Route path="/materiais/:id" element={<ProtectedRoute allowedRoles={['admin','tecnico','coordenador_dlab','supervisor','chefe_departamento']}><AppShell><Suspense fallback={<FullPageSpinner />}><MaterialDetalhe /></Suspense></AppShell></ProtectedRoute>} />
       <Route path="/relatorios" element={<ProtectedRoute><AppShell><Suspense fallback={<FullPageSpinner />}><RelatoriosList /></Suspense></AppShell></ProtectedRoute>} />
       <Route path="/relatorios/:id" element={<ProtectedRoute><AppShell><Suspense fallback={<FullPageSpinner />}><RelatorioDetalhe /></Suspense></AppShell></ProtectedRoute>} />
 

@@ -37,16 +37,19 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// PUT /agendamentos/:id/confirmar-professor — professor marca concluído (A,P)
+// PUT /agendamentos/:id/confirmar-professor — professor marcou como concluído (A,P do dono)
 router.put('/:id/confirmar-professor', rbac('admin', 'professor'), async (req, res, next) => {
   try {
     const ag = await prisma.agendamento.findUnique({
       where: { id: Number(req.params.id) },
-      include: { actividade: { select: { estado: true } } },
+      include: { actividade: { select: { estado: true, utilizador_id: true } } },
     });
     if (!ag || !ag.activo) return res.status(404).json({ message: 'Agendamento não encontrado' });
     if (ag.estado !== 'aprovado_supervisor') {
       return res.status(409).json({ message: 'O agendamento ainda não foi aprovado pelo Supervisor; só pode ser concluído após a aprovação final.' });
+    }
+    if (req.user.tipo === 'professor' && ag.actividade.utilizador_id !== req.user.id) {
+      return res.status(403).json({ message: 'Apenas o professor responsável pela atividade pode confirmar a presença.' });
     }
     const atualizado = await prisma.agendamento.update({
       where: { id: ag.id },
@@ -59,7 +62,7 @@ router.put('/:id/confirmar-professor', rbac('admin', 'professor'), async (req, r
   }
 });
 
-// PUT /agendamentos/:id/confirmar-tecnico — técnico confirma; quando ambos, realizada → baixa stock (T,A)
+// PUT /agendamentos/:id/confirmar-tecnico — técnico confirmou; quando ambos, realizada → baixa stock (T validador)
 router.put('/:id/confirmar-tecnico', rbac('tecnico', 'admin'), async (req, res, next) => {
   try {
     const ag = await prisma.agendamento.findUnique({
@@ -69,6 +72,14 @@ router.put('/:id/confirmar-tecnico', rbac('tecnico', 'admin'), async (req, res, 
     if (!ag || !ag.activo) return res.status(404).json({ message: 'Agendamento não encontrado' });
     if (ag.estado !== 'aprovado_supervisor') {
       return res.status(409).json({ message: 'O agendamento ainda não foi aprovado pelo Supervisor; só pode ser concluído após a aprovação final.' });
+    }
+    if (req.user.tipo === 'tecnico') {
+      const vinculacao = await prisma.actividadeTecnico.findFirst({
+        where: { actividade_id: ag.actividade_id, utilizador_id: req.user.id, papel: 'validador', activo: true },
+      });
+      if (!vinculacao) {
+        return res.status(403).json({ message: 'Apenas o técnico (validador) atribuído à atividade pode confirmar o término.' });
+      }
     }
 
     const jaRealizada = ag.realizado;

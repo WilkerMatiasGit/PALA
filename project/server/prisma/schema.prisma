@@ -97,6 +97,11 @@ enum TecnicoTipo {
   assistente
 }
 
+enum TurnoTipo {
+  manha
+  tarde
+}
+
 // ============================ UTILIZADORES / ACADÉMICO ============================
 
 model Utilizador {
@@ -344,6 +349,8 @@ model Aula {
   actividade_id     Int      @unique
   curso_disciplina_id Int
   tema              String?
+  turno             TurnoTipo?
+  numero_turma      Int?
   criado_em         DateTime @default(now())
   actualizado_em    DateTime @updatedAt
   activo            Boolean  @default(true)

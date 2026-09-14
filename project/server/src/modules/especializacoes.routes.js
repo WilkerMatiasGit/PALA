@@ -21,17 +21,27 @@ aulas.use(authRequired);
 // POST /aulas — upsert por atividade (cria se não existir, atualiza se existir)
 aulas.post('/', rbac(...ACT_ROLES), async (req, res, next) => {
   try {
-    const { actividade_id, curso_disciplina_id, tema } = req.body || {};
+    const { actividade_id, curso_disciplina_id, tema, turno, numero_turma } = req.body || {};
     if (!actividade_id || !curso_disciplina_id) {
       return res.status(400).json({ message: 'actividade_id e curso_disciplina_id são obrigatórios' });
     }
+    const normTurno = turno === 'manha' || turno === 'tarde' ? turno : null;
+    const normNumero = Number.isInteger(numero_turma) ? numero_turma : Number(numero_turma);
+    const finalNumero = Number.isInteger(normNumero) && normNumero > 0 ? normNumero : null;
     const result = await prisma.aula.upsert({
       where: { actividade_id: Number(actividade_id) },
-      update: { curso_disciplina_id: Number(curso_disciplina_id), tema: tema || '' },
+      update: {
+        curso_disciplina_id: Number(curso_disciplina_id),
+        tema: tema || '',
+        turno: normTurno,
+        numero_turma: finalNumero,
+      },
       create: {
         actividade_id: Number(actividade_id),
         curso_disciplina_id: Number(curso_disciplina_id),
         tema: tema || '',
+        turno: normTurno,
+        numero_turma: finalNumero,
       },
       include: cdInclude,
     });

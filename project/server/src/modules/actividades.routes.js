@@ -20,13 +20,18 @@ const actInclude = { utilizador: true, laboratorio: true };
 
 // ---- CRUD Actividades ----
 
-// GET /actividades — listar (filtros tipo, estado, lab)
+// GET /actividades — listar (filtros tipo, estado, lab, visibilidade por role)
 router.get('/', async (req, res, next) => {
   try {
     const where = { activo: true };
     if (req.query.tipo) where.tipo = req.query.tipo;
     if (req.query.estado) where.estado = req.query.estado;
     if (req.query.laboratorio_id) where.laboratorio_id = Number(req.query.laboratorio_id);
+    if (req.user.tipo === 'professor') {
+      where.utilizador_id = req.user.id;
+    } else if (req.user.tipo === 'tecnico') {
+      where.atividadeTecnicos = { some: { activo: true, utilizador_id: req.user.id } };
+    }
     const rows = await prisma.actividade.findMany({ where, include: actInclude, orderBy: { id: 'asc' } });
     res.json(rows.map(toActividadeGet));
   } catch (err) {
@@ -104,10 +109,17 @@ const HTTP = (status, message) => {
 function montarDetalhes(tipo, det) {
   const d = det || {};
   switch (tipo) {
-    case 'aula':
-      return d.curso_disciplina_id != null
-        ? { curso_disciplina_id: Number(d.curso_disciplina_id), tema: d.tema || '' }
-        : null;
+    case 'aula': {
+      if (d.curso_disciplina_id == null) return null;
+      const turno = d.turno === 'manha' || d.turno === 'tarde' ? d.turno : null;
+      const num = Number(d.numero_turma);
+      return {
+        curso_disciplina_id: Number(d.curso_disciplina_id),
+        tema: d.tema || '',
+        turno,
+        numero_turma: Number.isInteger(num) && num > 0 ? num : null,
+      };
+    }
     case 'visita':
       return d.nome_visitante && d.telefone && d.email
         ? { nome_visitante: d.nome_visitante, instituicao: d.instituicao || null, telefone: d.telefone, email: d.email }

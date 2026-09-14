@@ -132,9 +132,9 @@ async function run() {
   console.log('[seed] especializacoes...');
   await prisma.aula.createMany({
     data: [
-      { id: 1, actividade_id: 1, curso_disciplina_id: 1, tema: 'Compostos Aromáticos', criado_em: D('2026-05-20T10:00:00Z') },
-      { id: 2, actividade_id: 5, curso_disciplina_id: 2, tema: 'Pêndulo Simples', criado_em: D('2026-05-15T10:00:00Z') },
-      { id: 3, actividade_id: 6, curso_disciplina_id: 3, tema: 'Titulações Ácido-Base', criado_em: D('2026-05-10T10:00:00Z') },
+      { id: 1, actividade_id: 1, curso_disciplina_id: 1, tema: 'Compostos Aromáticos', turno: 'manha', numero_turma: 1, criado_em: D('2026-05-20T10:00:00Z') },
+      { id: 2, actividade_id: 5, curso_disciplina_id: 2, tema: 'Pêndulo Simples', turno: 'tarde', numero_turma: 2, criado_em: D('2026-05-15T10:00:00Z') },
+      { id: 3, actividade_id: 6, curso_disciplina_id: 3, tema: 'Titulações Ácido-Base', turno: 'manha', numero_turma: 3, criado_em: D('2026-05-10T10:00:00Z') },
     ],
   });
   await prisma.visita.createMany({

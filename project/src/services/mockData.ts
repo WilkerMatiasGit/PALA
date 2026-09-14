@@ -42,10 +42,10 @@ export const mockDisciplinas: DisciplinaGet[] = [
 ];
 
 export const mockCursoDisciplinas: CursoDisciplinaGet[] = [
-  { id: 1, curso_id: 3, curso_nome: 'Engenharia Química', disciplina_id: 1, disciplina_nome: 'Química Orgânica I', semestre: 3, criado_em: '2025-01-01T10:00:00Z', actualizado_em: '2025-01-01T10:00:00Z' },
-  { id: 2, curso_id: 3, curso_nome: 'Engenharia Química', disciplina_id: 3, disciplina_nome: 'Química Analítica', semestre: 4, criado_em: '2025-01-01T10:00:00Z', actualizado_em: '2025-01-01T10:00:00Z' },
-  { id: 3, curso_id: 1, curso_nome: 'Engenharia Informática', disciplina_id: 4, disciplina_nome: 'Programação II', semestre: 2, criado_em: '2025-01-01T10:00:00Z', actualizado_em: '2025-01-01T10:00:00Z' },
-  { id: 4, curso_id: 2, curso_nome: 'Gestão', disciplina_id: 5, disciplina_nome: 'Gestão de Projetos', semestre: 5, criado_em: '2025-01-01T10:00:00Z', actualizado_em: '2025-01-01T10:00:00Z' },
+  { id: 1, curso_id: 3, curso_nome: 'Engenharia Química', curso_abreviacao: 'EQ', disciplina_id: 1, disciplina_nome: 'Química Orgânica I', semestre: 3, criado_em: '2025-01-01T10:00:00Z', actualizado_em: '2025-01-01T10:00:00Z' },
+  { id: 2, curso_id: 3, curso_nome: 'Engenharia Química', curso_abreviacao: 'EQ', disciplina_id: 3, disciplina_nome: 'Química Analítica', semestre: 4, criado_em: '2025-01-01T10:00:00Z', actualizado_em: '2025-01-01T10:00:00Z' },
+  { id: 3, curso_id: 1, curso_nome: 'Engenharia Informática', curso_abreviacao: 'EI', disciplina_id: 4, disciplina_nome: 'Programação II', semestre: 2, criado_em: '2025-01-01T10:00:00Z', actualizado_em: '2025-01-01T10:00:00Z' },
+  { id: 4, curso_id: 2, curso_nome: 'Gestão', curso_abreviacao: 'GES', disciplina_id: 5, disciplina_nome: 'Gestão de Projetos', semestre: 5, criado_em: '2025-01-01T10:00:00Z', actualizado_em: '2025-01-01T10:00:00Z' },
 ];
 
 export const mockEstudantes: EstudanteGet[] = [
@@ -85,8 +85,8 @@ export const mockActividades: ActividadeGet[] = [
 ];
 
 export const mockAulas: AulaGet[] = [
-  { id: 1, actividade_id: 1, actividade_nome: 'Aula Química Orgânica I', curso_disciplina_id: 1, curso_disciplina_nome: 'Química Orgânica I (EQ - 3º Sem)', tema: 'Compostos Aromáticos', criado_em: '2026-05-20T10:00:00Z', actualizado_em: '2026-05-20T10:00:00Z' },
-  { id: 2, actividade_id: 5, actividade_nome: 'Aula Física Aplicada', curso_disciplina_id: 2, curso_disciplina_nome: 'Física Aplicada (EQ - 4º Sem)', tema: 'Pêndulo Simples', criado_em: '2026-05-15T10:00:00Z', actualizado_em: '2026-05-15T10:00:00Z' },
+  { id: 1, actividade_id: 1, actividade_nome: 'Aula Química Orgânica I', curso_disciplina_id: 1, curso_disciplina_nome: 'Química Orgânica I (EQ - 3º Sem)', tema: 'Compostos Aromáticos', turno: 'manha', numero_turma: 1, turma: 'EQ_M1', criado_em: '2026-05-20T10:00:00Z', actualizado_em: '2026-05-20T10:00:00Z' },
+  { id: 2, actividade_id: 5, actividade_nome: 'Aula Física Aplicada', curso_disciplina_id: 2, curso_disciplina_nome: 'Física Aplicada (EQ - 4º Sem)', tema: 'Pêndulo Simples', turno: 'tarde', numero_turma: 2, turma: 'EQ_T2', criado_em: '2026-05-15T10:00:00Z', actualizado_em: '2026-05-15T10:00:00Z' },
 ];
 
 export const mockVisitas: VisitaGet[] = [

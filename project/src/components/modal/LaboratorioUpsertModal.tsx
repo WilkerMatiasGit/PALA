@@ -71,7 +71,7 @@ export function LaboratorioUpsertModal({ open, onOpenChange, laboratorio, onSave
             <Input id="nome" required value={nome} onChange={(e) => setNome(e.target.value)} />
           </div>
           <div className="space-y-2">
-            <Label>Tipo</Label>
+            <Label>Unidade Laboratorial</Label>
             <Select value={tipo} onValueChange={(v) => setTipo(v as typeof tipo)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>

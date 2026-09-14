@@ -120,6 +120,8 @@ export const cursoDisciplinasRouter = cursoDisciplinas;
 const estudantes = Router();
 estudantes.use(authRequired);
 
+const ESTUDANTE_EDIT_ROLES = ['admin', 'coordenador_dlab', 'supervisor', 'chefe_departamento']; // professor só lê
+
 const estudanteInclude = { curso: true };
 
 estudantes.get('/', async (req, res, next) => {
@@ -148,7 +150,7 @@ estudantes.get('/:id', async (req, res, next) => {
   }
 });
 
-estudantes.post('/', rbac('admin', 'professor', 'coordenador_dlab', 'supervisor', 'chefe_departamento'), async (req, res, next) => {
+estudantes.post('/', rbac(...ESTUDANTE_EDIT_ROLES), async (req, res, next) => {
   try {
     const { id, nome, curso_id } = req.body || {};
     if (!id || !nome || !curso_id) return res.status(400).json({ message: 'id (matrícula), nome e curso_id são obrigatórios' });
@@ -166,7 +168,7 @@ estudantes.post('/', rbac('admin', 'professor', 'coordenador_dlab', 'supervisor'
   }
 });
 
-estudantes.put('/:id', rbac('admin', 'professor', 'coordenador_dlab', 'supervisor', 'chefe_departamento'), async (req, res, next) => {
+estudantes.put('/:id', rbac(...ESTUDANTE_EDIT_ROLES), async (req, res, next) => {
   try {
     const e = await prisma.estudante.findUnique({ where: { id: Number(req.params.id) } });
     if (!e) return res.status(404).json({ message: 'Estudante não encontrado' });
@@ -185,7 +187,7 @@ estudantes.put('/:id', rbac('admin', 'professor', 'coordenador_dlab', 'superviso
   }
 });
 
-estudantes.delete('/:id', rbac('admin', 'professor', 'coordenador_dlab', 'supervisor', 'chefe_departamento'), async (req, res, next) => {
+estudantes.delete('/:id', rbac(...ESTUDANTE_EDIT_ROLES), async (req, res, next) => {
   try {
     const e = await prisma.estudante.findUnique({ where: { id: Number(req.params.id) } });
     if (!e) return res.status(404).json({ message: 'Estudante não encontrado' });

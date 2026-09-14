@@ -50,6 +50,8 @@ export type MovimentacaoMotivo =
 
 export type TecnicoTipo = 'validador' | 'assistente';
 
+export type TurnoTipo = 'manha' | 'tarde';
+
 export const UTILIZADOR_TIPO_LABELS: Record<UtilizadorTipo, string> = {
   admin: 'Administrador',
   professor: 'Professor',
@@ -139,6 +141,15 @@ export const TECNICO_TIPO_LABELS: Record<TecnicoTipo, string> = {
   validador: 'Validador',
   assistente: 'Assistente',
 };
+
+export const TURNO_TIPO_LABELS: Record<TurnoTipo, string> = {
+  manha: 'Manhã',
+  tarde: 'Tarde',
+};
+
+export const TURNO_TIPO_OPTIONS = Object.entries(TURNO_TIPO_LABELS).map(
+  ([value, label]) => ({ value, label }),
+);
 
 export const UTILIZADOR_TIPO_OPTIONS = Object.entries(
   UTILIZADOR_TIPO_LABELS

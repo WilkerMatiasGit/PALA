@@ -21,6 +21,7 @@ import { Plus, Pencil, Trash2, ChevronRight, FlaskConical } from 'lucide-react';
 export default function LaboratoriosList() {
   const { user } = useAuth();
   const canEdit = hasRole(user?.tipo, ['admin']);
+  const canViewDetalhe = hasRole(user?.tipo, ['admin', 'tecnico', 'coordenador_dlab', 'supervisor', 'chefe_departamento']);
   const navigate = useNavigate();
   const [data, setData] = useState<LaboratorioGet[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,14 +55,14 @@ export default function LaboratoriosList() {
             <TableHeader>
               <TableRow>
                 <TableHead>Nome</TableHead>
-                <TableHead>Tipo</TableHead>
+                <TableHead>Unidade Laboratorial</TableHead>
                 <TableHead>Descrição</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {data.map((lab) => (
-                <TableRow key={lab.id} className="cursor-pointer" onClick={() => navigate(`/labs/${lab.id}`)}>
+                <TableRow key={lab.id} className={canViewDetalhe ? 'cursor-pointer' : ''} onClick={() => canViewDetalhe && navigate(`/labs/${lab.id}`)}>
                   <TableCell className="font-medium">{lab.nome}</TableCell>
                   <TableCell><Badge variant="secondary">{LABORATORIO_TIPO_LABELS[lab.tipo]}</Badge></TableCell>
                   <TableCell className="max-w-xs truncate text-muted-foreground">{lab.descricao}</TableCell>
@@ -69,7 +70,7 @@ export default function LaboratoriosList() {
                     <div className="flex justify-end gap-1">
                       {canEdit && <Button variant="ghost" size="icon" onClick={() => { setEditing(lab); setModalOpen(true); }}><Pencil className="h-4 w-4" /></Button>}
                       {canEdit && <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(lab)}><Trash2 className="h-4 w-4 text-destructive" /></Button>}
-                      <Button variant="ghost" size="icon" onClick={() => navigate(`/labs/${lab.id}`)}><ChevronRight className="h-4 w-4" /></Button>
+                      {canViewDetalhe && <Button variant="ghost" size="icon" onClick={() => navigate(`/labs/${lab.id}`)}><ChevronRight className="h-4 w-4" /></Button>}
                     </div>
                   </TableCell>
                 </TableRow>
