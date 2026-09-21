@@ -93,14 +93,13 @@ projectos.use(authRequired);
 
 projectos.post('/', rbac(...ACT_ROLES), async (req, res, next) => {
   try {
-    const { actividade_id, responsavel_id, titulo, descricao, data_inicio, data_fim } = req.body || {};
-    if (!actividade_id || !responsavel_id || !titulo || !data_inicio || !data_fim) {
-      return res.status(400).json({ message: 'actividade_id, responsavel_id, titulo, data_inicio e data_fim são obrigatórios' });
+    const { actividade_id, titulo, descricao, data_inicio, data_fim } = req.body || {};
+    if (!actividade_id || !titulo || !data_inicio || !data_fim) {
+      return res.status(400).json({ message: 'actividade_id, titulo, data_inicio e data_fim são obrigatórios' });
     }
     const result = await prisma.projecto.upsert({
       where: { actividade_id: Number(actividade_id) },
       update: {
-        responsavel_id: Number(responsavel_id),
         titulo,
         descricao: descricao || '',
         data_inicio: new Date(data_inicio),
@@ -108,13 +107,11 @@ projectos.post('/', rbac(...ACT_ROLES), async (req, res, next) => {
       },
       create: {
         actividade_id: Number(actividade_id),
-        responsavel_id: Number(responsavel_id),
         titulo,
         descricao: descricao || '',
         data_inicio: new Date(data_inicio),
         data_fim: new Date(data_fim),
       },
-      include: { responsavel: true },
     });
     res.status(200).json(toProjectoGet(result));
   } catch (err) {
@@ -132,7 +129,6 @@ projectos.put('/:id/documento', rbac(...ACT_ROLES), async (req, res, next) => {
     const atualizado = await prisma.projecto.update({
       where: { id: p.id },
       data: { anexo_path },
-      include: { responsavel: true },
     });
     res.json(toProjectoGet(atualizado));
   } catch (err) {
@@ -148,26 +144,24 @@ estagios.use(authRequired);
 
 estagios.post('/', rbac(...ACT_ROLES), async (req, res, next) => {
   try {
-    const { actividade_id, responsavel_id, estudante_id, data_inicio, data_fim } = req.body || {};
-    if (!actividade_id || !responsavel_id || !estudante_id || !data_inicio || !data_fim) {
-      return res.status(400).json({ message: 'actividade_id, responsavel_id, estudante_id, data_inicio e data_fim são obrigatórios' });
+    const { actividade_id, estudante_id, data_inicio, data_fim } = req.body || {};
+    if (!actividade_id || !estudante_id || !data_inicio || !data_fim) {
+      return res.status(400).json({ message: 'actividade_id, estudante_id, data_inicio e data_fim são obrigatórios' });
     }
     const result = await prisma.estagio.upsert({
       where: { actividade_id: Number(actividade_id) },
       update: {
-        responsavel_id: Number(responsavel_id),
         estudante_id: Number(estudante_id),
         data_inicio: new Date(data_inicio),
         data_fim: new Date(data_fim),
       },
       create: {
         actividade_id: Number(actividade_id),
-        responsavel_id: Number(responsavel_id),
         estudante_id: Number(estudante_id),
         data_inicio: new Date(data_inicio),
         data_fim: new Date(data_fim),
       },
-      include: { responsavel: true, estudante: true },
+      include: { estudante: true },
     });
     res.status(200).json(toEstagioGet(result));
   } catch (err) {
@@ -185,7 +179,7 @@ estagios.put('/:id/documento', rbac(...ACT_ROLES), async (req, res, next) => {
     const atualizado = await prisma.estagio.update({
       where: { id: e.id },
       data: { anexo_path },
-      include: { responsavel: true, estudante: true },
+      include: { estudante: true },
     });
     res.json(toEstagioGet(atualizado));
   } catch (err) {

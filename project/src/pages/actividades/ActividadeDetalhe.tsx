@@ -74,9 +74,9 @@ export default function ActividadeDetalhe() {
   const est = formatEstado(actividade.estado);
   const tipo = formatTipo(actividade.tipo);
 
-  const ehDono = user?.tipo === 'professor' && user.id === actividade.utilizador_id;
+  const ehResponsavel = user?.tipo === 'professor' && user.id === actividade.responsavel_id;
   const ehValidador = user?.tipo === 'tecnico' && tecnicos.some((t) => t.utilizador_id === user?.id && t.papel === 'validador');
-  const canConfirm = user?.tipo === 'admin' || ehDono;
+  const canConfirm = user?.tipo === 'admin' || ehResponsavel;
   const canConfirmTec = user?.tipo === 'admin' || ehValidador;
 
   const handleConfirmProf = (agId: number) => {
@@ -105,7 +105,8 @@ export default function ActividadeDetalhe() {
           <CardHeader><CardTitle className="text-base">Informação Geral</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">
             <div className="flex justify-between"><span className="text-muted-foreground">Laboratório</span><span className="font-medium">{actividade.laboratorio_nome}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Submetido por</span><span className="font-medium">{actividade.utilizador_nome}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Criado por</span><span className="font-medium">{actividade.criado_por_nome}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Responsável</span><span className="font-medium">{actividade.responsavel_nome}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Participantes</span><span className="font-medium">{actividade.num_participantes}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Precisa assistente</span><span className="font-medium">{actividade.precisa_assistente ? 'Sim' : 'Não'}</span></div>
             {actividade.observacoes && <Separator />}
@@ -136,7 +137,6 @@ export default function ActividadeDetalhe() {
             {actividade.tipo === 'projecto' && projecto && (
               <>
                 <div className="flex justify-between"><span className="text-muted-foreground">Título</span><span className="font-medium">{projecto.titulo}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Responsável</span><span className="font-medium">{projecto.responsavel_nome}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Início</span><span className="font-medium">{formatDate(projecto.data_inicio)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Fim</span><span className="font-medium">{formatDate(projecto.data_fim)}</span></div>
                 {projecto.descricao && <div><span className="text-muted-foreground">Descrição: </span>{projecto.descricao}</div>}
@@ -145,7 +145,6 @@ export default function ActividadeDetalhe() {
             {actividade.tipo === 'estagio' && estagio && (
               <>
                 <div className="flex justify-between"><span className="text-muted-foreground">Estudante</span><span className="font-medium">{estagio.estudante_nome}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Responsável</span><span className="font-medium">{estagio.responsavel_nome}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Início</span><span className="font-medium">{formatDate(estagio.data_inicio)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Fim</span><span className="font-medium">{formatDate(estagio.data_fim)}</span></div>
               </>

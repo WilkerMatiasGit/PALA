@@ -6,8 +6,10 @@ import type {
 export interface ActividadeGet {
   id: number;
   nome: string;
-  utilizador_id: number;
-  utilizador_nome: string;
+  criado_por_id: number;
+  criado_por_nome: string;
+  responsavel_id: number;
+  responsavel_nome: string;
   laboratorio_id: number;
   laboratorio_nome: string;
   tipo: ActividadeTipo;
@@ -22,7 +24,7 @@ export interface ActividadeGet {
 export interface ActividadeUpsert {
   id?: number;
   nome: string;
-  utilizador_id: number;
+  responsavel_id: number;
   laboratorio_id: number;
   num_participantes: number;
   observacoes: string;
@@ -33,8 +35,8 @@ export interface ActividadeUpsert {
 export type ActividadeDetalhesPayload =
   | { curso_disciplina_id: number; tema: string; turno: string; numero_turma: number }
   | { nome_visitante: string; instituicao?: string; telefone: string; email: string }
-  | { responsavel_id: number; titulo: string; descricao: string; data_inicio: string; data_fim: string }
-  | { responsavel_id: number; estudante_id: number; data_inicio: string; data_fim: string };
+  | { titulo: string; descricao: string; data_inicio: string; data_fim: string }
+  | { estudante_id: number; data_inicio: string; data_fim: string };
 
 export interface ActividadeFullUpsert extends ActividadeUpsert {
   detalhes?: ActividadeDetalhesPayload;
@@ -90,8 +92,6 @@ export interface ProjectoGet {
   id: number;
   actividade_id: number;
   actividade_nome: string;
-  responsavel_id: number;
-  responsavel_nome: string;
   titulo: string;
   descricao: string;
   data_inicio: string;
@@ -104,7 +104,6 @@ export interface ProjectoGet {
 export interface ProjectoUpsert {
   id?: number;
   actividade_id: number;
-  responsavel_id: number;
   titulo: string;
   descricao: string;
   data_inicio: string;
@@ -115,8 +114,6 @@ export interface EstagioGet {
   id: number;
   actividade_id: number;
   actividade_nome: string;
-  responsavel_id: number;
-  responsavel_nome: string;
   estudante_id: number;
   estudante_nome: string;
   data_inicio: string;
@@ -129,7 +126,6 @@ export interface EstagioGet {
 export interface EstagioUpsert {
   id?: number;
   actividade_id: number;
-  responsavel_id: number;
   estudante_id: number;
   data_inicio: string;
   data_fim: string;

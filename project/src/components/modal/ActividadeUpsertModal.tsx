@@ -76,6 +76,14 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
   const [numParticipantes, setNumParticipantes] = useState('1');
   const [precisaAssistente, setPrecisaAssistente] = useState(false);
   const [observacoes, setObservacoes] = useState('');
+  const [responsavelId, setResponsavelId] = useState('');
+
+  // Quem não é professor escolhe o responsável; para "aula" só professores.
+  const isProf = user?.tipo === 'professor';
+  const responsavelOptions = users.filter((u) => {
+    if (tipo === 'aula') return u.tipo === 'professor';
+    return u.tipo === 'professor' || (user ? u.id === user.id : false);
+  });
 
   // Step 2: type-specific
   // Aula
@@ -89,7 +97,6 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
   const [telefone, setTelefone] = useState('');
   const [emailVisitante, setEmailVisitante] = useState('');
   // Projeto/Estágio
-  const [responsavelId, setResponsavelId] = useState('');
   const [titulo, setTitulo] = useState('');
   const [descricao, setDescricao] = useState('');
   const [dataInicio, setDataInicio] = useState('');
@@ -124,10 +131,10 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
   const resetForm = () => {
     setStep(1);
     setNome(''); setLabId(''); setTipo('aula'); setNumParticipantes('1');
-    setPrecisaAssistente(false); setObservacoes('');
+    setPrecisaAssistente(false); setObservacoes(''); setResponsavelId('');
     setCursoDisciplinaId(''); setTema(''); setTurno(''); setNumeroTurma('');
     setNomeVisitante(''); setInstituicao(''); setTelefone(''); setEmailVisitante('');
-    setResponsavelId(''); setTitulo(''); setDescricao(''); setDataInicio(''); setDataFim(''); setEstudanteId('');
+    setTitulo(''); setDescricao(''); setDataInicio(''); setDataFim(''); setEstudanteId('');
     setAgendamentos([{ data: '', hora_inicio: '', hora_fim: '' }]);
     setMaterialReqs([]);
   };
@@ -139,6 +146,7 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
         setNome(actividade.nome); setLabId(String(actividade.laboratorio_id));
         setTipo(actividade.tipo); setNumParticipantes(String(actividade.num_participantes));
         setPrecisaAssistente(actividade.precisa_assistente); setObservacoes(actividade.observacoes);
+        setResponsavelId(String(actividade.responsavel_id));
       }
     }
     onOpenChange(v);
@@ -147,10 +155,12 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
   const getStepError = (s: number): string | null => {
     if (s === 1) return (!nome || !labId) ? 'Preencha o nome e o laboratório' : null;
     if (s === 2) {
+      // Responsável é sempre obrigatório para quem não é professor (auto-atribuição no backend)
+      if (!isProf && !responsavelId) return 'Selecione o responsável da atividade';
       if (tipo === 'aula') return !cursoDisciplinaId ? 'Selecione a disciplina' : null;
       if (tipo === 'visita') return (!nomeVisitante || !telefone || !emailVisitante) ? 'Preencha os dados do visitante' : null;
       if (tipo === 'projecto' || tipo === 'estagio') {
-        if (!responsavelId || !titulo || !dataInicio || !dataFim) return 'Preencha o responsável, título e as datas';
+        if (!titulo || !dataInicio || !dataFim) return 'Preencha o título e as datas';
         const today = new Date(); today.setHours(0, 0, 0, 0);
         const ini = new Date(dataInicio + 'T00:00:00');
         const fim = new Date(dataFim + 'T00:00:00');
@@ -216,7 +226,7 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
     try {
       const actData: ActividadeUpsert = {
         nome,
-        utilizador_id: actividade?.utilizador_id ?? user?.id ?? 1,
+        responsavel_id: Number(responsavelId || (actividade?.responsavel_id ?? user?.id ?? 1)),
         laboratorio_id: Number(labId),
         num_participantes: Number(numParticipantes),
         observacoes,
@@ -230,8 +240,8 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
           : tipo === 'visita'
             ? { nome_visitante: nomeVisitante, telefone, email: emailVisitante, ...(instituicao ? { instituicao } : {}) }
             : tipo === 'projecto'
-              ? { responsavel_id: Number(responsavelId), titulo, descricao, data_inicio: dataInicio, data_fim: dataFim }
-              : { responsavel_id: Number(responsavelId), estudante_id: Number(estudanteId), data_inicio: dataInicio, data_fim: dataFim };
+              ? { titulo, descricao, data_inicio: dataInicio, data_fim: dataFim }
+              : { estudante_id: Number(estudanteId), data_inicio: dataInicio, data_fim: dataFim };
 
       const payload: ActividadeFullUpsert = {
         ...actData,
@@ -330,6 +340,22 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
         {step === 2 && (
           <div className="space-y-4">
             <Badge variant="secondary">{ACTIVIDADE_TIPO_OPTIONS.find((o) => o.value === tipo)?.label}</Badge>
+            {!isProf ? (
+              <div className="space-y-2">
+                <Label htmlFor="act-responsavel">Responsável da atividade</Label>
+                <Select value={responsavelId} onValueChange={setResponsavelId}>
+                  <SelectTrigger id="act-responsavel"><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                  <SelectContent>{responsavelOptions.map((u) => <SelectItem key={u.id} value={String(u.id)}>{u.nome}</SelectItem>)}</SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {tipo === 'aula' ? 'Nas aulas, o responsável tem de ser obrigatoriamente um professor.' : 'O responsável pode ser o próprio utilizador ou um professor.'}
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-md border px-3 py-2 text-sm">
+                <span className="text-muted-foreground">Responsável: </span><span className="font-medium">{user?.nome} (você)</span>
+              </div>
+            )}
             {tipo === 'aula' && (
               <>
                 <div className="space-y-2">
@@ -394,13 +420,6 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
             )}
             {(tipo === 'projecto' || tipo === 'estagio') && (
               <>
-                <div className="space-y-2">
-                  <Label>Professor responsável</Label>
-                  <Select value={responsavelId} onValueChange={setResponsavelId}>
-                    <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
-                    <SelectContent>{users.filter((u) => u.tipo === 'professor' || u.tipo === 'admin').map((u) => <SelectItem key={u.id} value={String(u.id)}>{u.nome}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
                 <div className="space-y-2">
                   <Label htmlFor="proj-titulo">Título</Label>
                   <Input id="proj-titulo" required value={titulo} onChange={(e) => setTitulo(e.target.value)} />

@@ -273,7 +273,8 @@ export default function AprovacaoDetalhe() {
           <CardHeader><CardTitle className="text-base">Dados da Actividade</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">
             <div className="flex justify-between"><span className="text-muted-foreground">Laboratório</span><span className="font-medium">{actividade.laboratorio_nome}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Submetido por</span><span className="font-medium">{actividade.utilizador_nome}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Criado por</span><span className="font-medium">{actividade.criado_por_nome}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Responsável</span><span className="font-medium">{actividade.responsavel_nome}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Participantes</span><span className="font-medium">{actividade.num_participantes}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Precisa assistente</span><span className="font-medium">{actividade.precisa_assistente ? 'Sim' : 'Não'}</span></div>
             {actividade.observacoes && <p className="pt-2 text-muted-foreground">{actividade.observacoes}</p>}

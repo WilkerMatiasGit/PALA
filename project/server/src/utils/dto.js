@@ -108,13 +108,15 @@ export function toHistoricoGet(h) {
   return out;
 }
 
-// Recebe Actividade com include { utilizador, laboratorio }
+// Recebe Actividade com include { criado_por, responsavel, laboratorio }
 export function toActividadeGet(a) {
   return {
     id: a.id,
     nome: a.nome,
-    utilizador_id: a.utilizador_id,
-    utilizador_nome: a.utilizador?.nome ?? '',
+    criado_por_id: a.criado_por_id,
+    criado_por_nome: a.criado_por?.nome ?? '',
+    responsavel_id: a.responsavel_id,
+    responsavel_nome: a.responsavel?.nome ?? '',
     laboratorio_id: a.laboratorio_id,
     laboratorio_nome: a.laboratorio?.nome ?? '',
     tipo: a.tipo,
@@ -165,13 +167,11 @@ export function toVisitaGet(v) {
   };
 }
 
-// Recebe Projecto com include { responsavel }
+// Recebe Projecto
 export function toProjectoGet(p) {
   return {
     id: p.id,
     actividade_id: p.actividade_id,
-    responsavel_id: p.responsavel_id,
-    responsavel_nome: p.responsavel?.nome ?? '',
     titulo: p.titulo,
     descricao: p.descricao ?? '',
     data_inicio: p.data_inicio,
@@ -182,13 +182,11 @@ export function toProjectoGet(p) {
   };
 }
 
-// Recebe Estagio com include { responsavel, estudante }
+// Recebe Estagio com include { estudante }
 export function toEstagioGet(e) {
   return {
     id: e.id,
     actividade_id: e.actividade_id,
-    responsavel_id: e.responsavel_id,
-    responsavel_nome: e.responsavel?.nome ?? '',
     estudante_id: e.estudante_id,
     estudante_nome: e.estudante?.nome ?? '',
     data_inicio: e.data_inicio,

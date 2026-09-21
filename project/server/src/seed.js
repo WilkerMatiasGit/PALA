@@ -6,13 +6,13 @@ export function buildSeed() {
   const now = new Date().toISOString();
   return {
     utilizadores: [
-      { id: 1, nome: 'João Silva', email: 'jsilva@isptec.pt', tipo: 'professor', criado_em: '2025-01-10T10:00:00Z', actualizado_em: '2025-01-10T10:00:00Z' },
-      { id: 2, nome: 'Ana Martins', email: 'amartins@isptec.pt', tipo: 'tecnico', criado_em: '2025-01-12T10:00:00Z', actualizado_em: '2025-01-12T10:00:00Z' },
-      { id: 3, nome: 'Carlos Pereira', email: 'cpereira@isptec.pt', tipo: 'admin', criado_em: '2025-01-05T10:00:00Z', actualizado_em: '2025-01-05T10:00:00Z' },
-      { id: 4, nome: 'Maria Santos', email: 'msantos@isptec.pt', tipo: 'coordenador_dlab', criado_em: '2025-01-08T10:00:00Z', actualizado_em: '2025-01-08T10:00:00Z' },
-      { id: 5, nome: 'Rui Fernandes', email: 'rfernandes@isptec.pt', tipo: 'supervisor', criado_em: '2025-01-06T10:00:00Z', actualizado_em: '2025-01-06T10:00:00Z' },
-      { id: 6, nome: 'Sofia Costa', email: 'scosta@isptec.pt', tipo: 'chefe_departamento', criado_em: '2025-01-07T10:00:00Z', actualizado_em: '2025-01-07T10:00:00Z' },
-      { id: 7, nome: 'Pedro Almeida', email: 'palmeida@isptec.pt', tipo: 'professor', criado_em: '2025-02-01T10:00:00Z', actualizado_em: '2025-02-01T10:00:00Z' },
+      { id: 1, nome: 'João Silva', email: 'jsilva@isptec.co.ao', tipo: 'professor', criado_em: '2025-01-10T10:00:00Z', actualizado_em: '2025-01-10T10:00:00Z' },
+      { id: 2, nome: 'Ana Martins', email: 'amartins@isptec.co.ao', tipo: 'tecnico', criado_em: '2025-01-12T10:00:00Z', actualizado_em: '2025-01-12T10:00:00Z' },
+      { id: 3, nome: 'Carlos Pereira', email: 'cpereira@isptec.co.ao', tipo: 'admin', criado_em: '2025-01-05T10:00:00Z', actualizado_em: '2025-01-05T10:00:00Z' },
+      { id: 4, nome: 'Maria Santos', email: 'msantos@isptec.co.ao', tipo: 'coordenador_dlab', criado_em: '2025-01-08T10:00:00Z', actualizado_em: '2025-01-08T10:00:00Z' },
+      { id: 5, nome: 'Rui Fernandes', email: 'rfernandes@isptec.co.ao', tipo: 'supervisor', criado_em: '2025-01-06T10:00:00Z', actualizado_em: '2025-01-06T10:00:00Z' },
+      { id: 6, nome: 'Sofia Costa', email: 'scosta@isptec.co.ao', tipo: 'chefe_departamento', criado_em: '2025-01-07T10:00:00Z', actualizado_em: '2025-01-07T10:00:00Z' },
+      { id: 7, nome: 'Pedro Almeida', email: 'palmeida@isptec.co.ao', tipo: 'professor', criado_em: '2025-02-01T10:00:00Z', actualizado_em: '2025-02-01T10:00:00Z' },
     ],
     laboratorios: [
       { id: 1, nome: 'Lab. Química 1', tipo: 'quimica', descricao: 'Laboratório de Química Geral e Orgânica', criado_em: '2025-01-01T10:00:00Z', actualizado_em: '2025-01-01T10:00:00Z' },

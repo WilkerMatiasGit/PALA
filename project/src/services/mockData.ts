@@ -76,12 +76,12 @@ export const mockHistorico: HistoricoMaterialGet[] = [
 ];
 
 export const mockActividades: ActividadeGet[] = [
-  { id: 1, nome: 'Aula Química Orgânica I', utilizador_id: 1, utilizador_nome: 'João Silva', laboratorio_id: 1, laboratorio_nome: 'Lab. Química 1', tipo: 'aula', estado: 'revisado_supervisor', num_participantes: 25, precisa_assistente: false, observacoes: 'Aula prática sobre compostos orgânicos', criado_em: '2026-05-20T10:00:00Z', actualizado_em: '2026-05-29T10:00:00Z' },
-  { id: 2, nome: 'Visita Institucional - IST', utilizador_id: 4, utilizador_nome: 'Maria Santos', laboratorio_id: 2, laboratorio_nome: 'Lab. Física', tipo: 'visita', estado: 'pendente', num_participantes: 15, precisa_assistente: true, observacoes: 'Visita guiada de estudantes do IST', criado_em: '2026-05-25T10:00:00Z', actualizado_em: '2026-05-25T10:00:00Z' },
-  { id: 3, nome: 'Projeto Síntese Verde', utilizador_id: 7, utilizador_nome: 'Pedro Almeida', laboratorio_id: 3, laboratorio_nome: 'Lab. Química 2', tipo: 'projecto', estado: 'revisado_dlab', num_participantes: 4, precisa_assistente: true, observacoes: 'Projeto de síntese de compostos verdes', criado_em: '2026-05-22T10:00:00Z', actualizado_em: '2026-05-27T10:00:00Z' },
-  { id: 4, nome: 'Estágio - Análise de Águas', utilizador_id: 1, utilizador_nome: 'João Silva', laboratorio_id: 3, laboratorio_nome: 'Lab. Química 2', tipo: 'estagio', estado: 'pendente', num_participantes: 1, precisa_assistente: false, observacoes: 'Estágio de análise de águas residuais', criado_em: '2026-05-28T10:00:00Z', actualizado_em: '2026-05-28T10:00:00Z' },
-  { id: 5, nome: 'Aula Física Aplicada', utilizador_id: 1, utilizador_nome: 'João Silva', laboratorio_id: 2, laboratorio_nome: 'Lab. Física', tipo: 'aula', estado: 'revisado_dlab', num_participantes: 20, precisa_assistente: false, observacoes: 'Aula sobre movimento oscilatório', criado_em: '2026-05-15T10:00:00Z', actualizado_em: '2026-05-26T10:00:00Z' },
-  { id: 6, nome: 'Aula Química Analítica', utilizador_id: 7, utilizador_nome: 'Pedro Almeida', laboratorio_id: 3, laboratorio_nome: 'Lab. Química 2', tipo: 'aula', estado: 'rejeitado', num_participantes: 18, precisa_assistente: false, observacoes: 'Aula sobre titulações', criado_em: '2026-05-10T10:00:00Z', actualizado_em: '2026-05-20T10:00:00Z' },
+  { id: 1, nome: 'Aula Química Orgânica I', criado_por_id: 1, criado_por_nome: 'João Silva', responsavel_id: 1, responsavel_nome: 'João Silva', laboratorio_id: 1, laboratorio_nome: 'Lab. Química 1', tipo: 'aula', estado: 'revisado_supervisor', num_participantes: 25, precisa_assistente: false, observacoes: 'Aula prática sobre compostos orgânicos', criado_em: '2026-05-20T10:00:00Z', actualizado_em: '2026-05-29T10:00:00Z' },
+  { id: 2, nome: 'Visita Institucional - IST', criado_por_id: 4, criado_por_nome: 'Maria Santos', responsavel_id: 7, responsavel_nome: 'Pedro Almeida', laboratorio_id: 2, laboratorio_nome: 'Lab. Física', tipo: 'visita', estado: 'pendente', num_participantes: 15, precisa_assistente: true, observacoes: 'Visita guiada de estudantes do IST', criado_em: '2026-05-25T10:00:00Z', actualizado_em: '2026-05-25T10:00:00Z' },
+  { id: 3, nome: 'Projeto Síntese Verde', criado_por_id: 7, criado_por_nome: 'Pedro Almeida', responsavel_id: 7, responsavel_nome: 'Pedro Almeida', laboratorio_id: 3, laboratorio_nome: 'Lab. Química 2', tipo: 'projecto', estado: 'revisado_dlab', num_participantes: 4, precisa_assistente: true, observacoes: 'Projeto de síntese de compostos verdes', criado_em: '2026-05-22T10:00:00Z', actualizado_em: '2026-05-27T10:00:00Z' },
+  { id: 4, nome: 'Estágio - Análise de Águas', criado_por_id: 1, criado_por_nome: 'João Silva', responsavel_id: 1, responsavel_nome: 'João Silva', laboratorio_id: 3, laboratorio_nome: 'Lab. Química 2', tipo: 'estagio', estado: 'pendente', num_participantes: 1, precisa_assistente: false, observacoes: 'Estágio de análise de águas residuais', criado_em: '2026-05-28T10:00:00Z', actualizado_em: '2026-05-28T10:00:00Z' },
+  { id: 5, nome: 'Aula Física Aplicada', criado_por_id: 1, criado_por_nome: 'João Silva', responsavel_id: 1, responsavel_nome: 'João Silva', laboratorio_id: 2, laboratorio_nome: 'Lab. Física', tipo: 'aula', estado: 'revisado_dlab', num_participantes: 20, precisa_assistente: false, observacoes: 'Aula sobre movimento oscilatório', criado_em: '2026-05-15T10:00:00Z', actualizado_em: '2026-05-26T10:00:00Z' },
+  { id: 6, nome: 'Aula Química Analítica', criado_por_id: 7, criado_por_nome: 'Pedro Almeida', responsavel_id: 7, responsavel_nome: 'Pedro Almeida', laboratorio_id: 3, laboratorio_nome: 'Lab. Química 2', tipo: 'aula', estado: 'rejeitado', num_participantes: 18, precisa_assistente: false, observacoes: 'Aula sobre titulações', criado_em: '2026-05-10T10:00:00Z', actualizado_em: '2026-05-20T10:00:00Z' },
 ];
 
 export const mockAulas: AulaGet[] = [
@@ -94,11 +94,11 @@ export const mockVisitas: VisitaGet[] = [
 ];
 
 export const mockProjectos: ProjectoGet[] = [
-  { id: 1, actividade_id: 3, actividade_nome: 'Projeto Síntese Verde', responsavel_id: 7, responsavel_nome: 'Pedro Almeida', titulo: 'Síntese de Compostos Verdes', descricao: 'Desenvolvimento de métodos de síntese sustentável', data_inicio: '2026-06-01', data_fim: '2026-12-31', anexo_path: undefined, criado_em: '2026-05-22T10:00:00Z', actualizado_em: '2026-05-22T10:00:00Z' },
+  { id: 1, actividade_id: 3, actividade_nome: 'Projeto Síntese Verde', titulo: 'Síntese de Compostos Verdes', descricao: 'Desenvolvimento de métodos de síntese sustentável', data_inicio: '2026-06-01', data_fim: '2026-12-31', anexo_path: undefined, criado_em: '2026-05-22T10:00:00Z', actualizado_em: '2026-05-22T10:00:00Z' },
 ];
 
 export const mockEstagios: EstagioGet[] = [
-  { id: 1, actividade_id: 4, actividade_nome: 'Estágio - Análise de Águas', responsavel_id: 1, responsavel_nome: 'João Silva', estudante_id: 20210001, estudante_nome: 'Carlos Mendes', data_inicio: '2026-07-01', data_fim: '2026-12-31', anexo_path: undefined, criado_em: '2026-05-28T10:00:00Z', actualizado_em: '2026-05-28T10:00:00Z' },
+  { id: 1, actividade_id: 4, actividade_nome: 'Estágio - Análise de Águas', estudante_id: 20210001, estudante_nome: 'Carlos Mendes', data_inicio: '2026-07-01', data_fim: '2026-12-31', anexo_path: undefined, criado_em: '2026-05-28T10:00:00Z', actualizado_em: '2026-05-28T10:00:00Z' },
 ];
 
 export const mockAgendamentos: AgendamentoGet[] = [

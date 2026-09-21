@@ -64,13 +64,15 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard icon={Clock} label="Pendentes" value={pendentes} color="amber" />
             <StatCard icon={CheckCircle2} label="Aprovadas" value={aprovadas} color="emerald" />
-            <StatCard icon={AlertTriangle} label="Alertas de Stock" value={stockAlerts} color="red" />
+            {user?.tipo !== 'professor' && (
+              <StatCard icon={AlertTriangle} label="Alertas de Stock" value={stockAlerts} color="red" />
+            )}
             <StatCard icon={CalendarDays} label="Agendamentos Hoje" value={hoje} color="blue" />
           </div>
 
           <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
             <ActividadesPendentesWidget actividades={actividades} loading={loading} hideViewAll={user?.tipo === 'professor'} />
-            <StockAlertsWidget materiais={materiais} loading={loading} />
+            {user?.tipo !== 'professor' && <StockAlertsWidget materiais={materiais} loading={loading} />}
           </div>
 
           <div className="mt-6">

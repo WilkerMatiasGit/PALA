@@ -42,13 +42,13 @@ router.put('/:id/confirmar-professor', rbac('admin', 'professor'), async (req, r
   try {
     const ag = await prisma.agendamento.findUnique({
       where: { id: Number(req.params.id) },
-      include: { actividade: { select: { estado: true, utilizador_id: true } } },
+      include: { actividade: { select: { estado: true, responsavel_id: true } } },
     });
     if (!ag || !ag.activo) return res.status(404).json({ message: 'Agendamento não encontrado' });
     if (ag.estado !== 'aprovado_supervisor') {
       return res.status(409).json({ message: 'O agendamento ainda não foi aprovado pelo Supervisor; só pode ser concluído após a aprovação final.' });
     }
-    if (req.user.tipo === 'professor' && ag.actividade.utilizador_id !== req.user.id) {
+    if (req.user.tipo === 'professor' && ag.actividade.responsavel_id !== req.user.id) {
       return res.status(403).json({ message: 'Apenas o professor responsável pela atividade pode confirmar a presença.' });
     }
     const atualizado = await prisma.agendamento.update({

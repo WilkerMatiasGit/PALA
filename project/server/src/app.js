@@ -91,6 +91,7 @@ app.use((req, res) => res.status(404).json({ message: 'Rota não encontrada' }))
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
   console.error('[erro]', err.message);
+  if (err.status) return res.status(err.status).json({ message: err.message });
   res.status(500).json({ message: 'Erro interno do servidor' });
 });
 

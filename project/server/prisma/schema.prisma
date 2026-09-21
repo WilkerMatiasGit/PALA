@@ -114,13 +114,12 @@ model Utilizador {
   actualizado_em DateTime   @updatedAt
   activo     Boolean        @default(true)
 
-  actividades            Actividade[]
-  historico              HistoricoMaterial[]
-  aprovacoes             Aprovacao[]
-  atividadeTecnicos      ActividadeTecnico[]
-  projectosResponsavel   Projecto[]   @relation("ProjectoResponsavel")
-  estagiosResponsavel    Estagio[]    @relation("EstagioResponsavel")
-  relatorios             Relatorio[]
+  actividadesCriadas      Actividade[] @relation("ActividadeCriadoPor")
+  actividadesResponsaveis Actividade[] @relation("ActividadeResponsavel")
+  historico               HistoricoMaterial[]
+  aprovacoes              Aprovacao[]
+  atividadeTecnicos       ActividadeTecnico[]
+  relatorios              Relatorio[]
 
   @@map("utilizadores")
 }
@@ -245,7 +244,8 @@ model HistoricoMaterial {
 model Actividade {
   id                Int             @id @default(autoincrement())
   nome              String
-  utilizador_id     Int
+  criado_por_id     Int
+  responsavel_id    Int
   laboratorio_id    Int
   tipo              ActividadeTipo
   estado            ActividadeEstado @default(pendente)
@@ -256,8 +256,9 @@ model Actividade {
   actualizado_em    DateTime        @updatedAt
   activo            Boolean         @default(true)
 
-  utilizador         Utilizador     @relation(fields: [utilizador_id], references: [id])
-  laboratorio        Laboratorio    @relation(fields: [laboratorio_id], references: [id])
+  criado_por           Utilizador     @relation("ActividadeCriadoPor", fields: [criado_por_id], references: [id])
+  responsavel          Utilizador     @relation("ActividadeResponsavel", fields: [responsavel_id], references: [id])
+  laboratorio          Laboratorio    @relation(fields: [laboratorio_id], references: [id])
   agendamentos       Agendamento[]
   aprovacoes         Aprovacao[]
   atividadeMateriais ActividadeMaterial[]
@@ -380,7 +381,6 @@ model Visita {
 model Projecto {
   id            Int      @id @default(autoincrement())
   actividade_id Int      @unique
-  responsavel_id Int
   titulo        String
   descricao     String?
   data_inicio   DateTime
@@ -391,7 +391,6 @@ model Projecto {
   activo        Boolean  @default(true)
 
   actividade  Actividade @relation(fields: [actividade_id], references: [id])
-  responsavel Utilizador @relation("ProjectoResponsavel", fields: [responsavel_id], references: [id])
 
   @@map("projectos")
 }
@@ -399,7 +398,6 @@ model Projecto {
 model Estagio {
   id            Int       @id @default(autoincrement())
   actividade_id Int       @unique
-  responsavel_id Int
   estudante_id  Int
   data_inicio   DateTime
   data_fim      DateTime
@@ -409,7 +407,6 @@ model Estagio {
   activo        Boolean   @default(true)
 
   actividade  Actividade @relation(fields: [actividade_id], references: [id])
-  responsavel Utilizador @relation("EstagioResponsavel", fields: [responsavel_id], references: [id])
   estudante   Estudante  @relation(fields: [estudante_id], references: [id])
 
   @@map("estagios")

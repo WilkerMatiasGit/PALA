@@ -5,6 +5,7 @@ import { NotificacoesProvider } from '@/context/NotificacoesContext';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
 import { AppShell } from '@/components/layout/AppShell';
 import { AuthLayout } from '@/components/layout/AuthLayout';
+import { ErrorBoundary } from '@/components/error/ErrorBoundary';
 import { FullPageSpinner } from '@/components/ui/spinner';
 import { Toaster } from '@/components/ui/sonner';
 
@@ -69,7 +70,9 @@ export default function AppRouter() {
     <BrowserRouter>
       <AuthProvider>
         <NotificacoesProvider>
-          <AppRoutes />
+          <ErrorBoundary>
+            <AppRoutes />
+          </ErrorBoundary>
           <Toaster />
         </NotificacoesProvider>
       </AuthProvider>

@@ -119,12 +119,12 @@ async function run() {
   console.log('[seed] actividades...');
   await prisma.actividade.createMany({
     data: [
-      { id: 1, nome: 'Aula Química Orgânica I', utilizador_id: 1, laboratorio_id: 1, tipo: 'aula', estado: 'revisado_supervisor', num_participantes: 25, precisa_assistente: false, observacoes: 'Aula prática sobre compostos orgânicos', criado_em: D('2026-05-20T10:00:00Z'), actualizado_em: D('2026-05-29T10:00:00Z') },
-      { id: 2, nome: 'Visita Institucional - IST', utilizador_id: 4, laboratorio_id: 2, tipo: 'visita', estado: 'pendente', num_participantes: 15, precisa_assistente: true, observacoes: 'Visita guiada de estudantes do IST', criado_em: D('2026-05-25T10:00:00Z') },
-      { id: 3, nome: 'Projeto Síntese Verde', utilizador_id: 7, laboratorio_id: 3, tipo: 'projecto', estado: 'revisado_dlab', num_participantes: 4, precisa_assistente: true, observacoes: 'Projeto de síntese de compostos verdes', criado_em: D('2026-05-22T10:00:00Z'), actualizado_em: D('2026-05-27T10:00:00Z') },
-      { id: 4, nome: 'Estágio - Análise de Águas', utilizador_id: 1, laboratorio_id: 3, tipo: 'estagio', estado: 'pendente', num_participantes: 1, precisa_assistente: false, observacoes: 'Estágio de análise de águas residuais', criado_em: D('2026-05-28T10:00:00Z') },
-      { id: 5, nome: 'Aula Física Aplicada', utilizador_id: 1, laboratorio_id: 2, tipo: 'aula', estado: 'revisado_dlab', num_participantes: 20, precisa_assistente: false, observacoes: 'Aula sobre movimento oscilatório', criado_em: D('2026-05-15T10:00:00Z'), actualizado_em: D('2026-05-26T10:00:00Z') },
-      { id: 6, nome: 'Aula Química Analítica', utilizador_id: 7, laboratorio_id: 3, tipo: 'aula', estado: 'rejeitado', num_participantes: 18, precisa_assistente: false, observacoes: 'Aula sobre titulações', criado_em: D('2026-05-10T10:00:00Z'), actualizado_em: D('2026-05-20T10:00:00Z') },
+      { id: 1, nome: 'Aula Química Orgânica I', criado_por_id: 1, responsavel_id: 1, laboratorio_id: 1, tipo: 'aula', estado: 'revisado_supervisor', num_participantes: 25, precisa_assistente: false, observacoes: 'Aula prática sobre compostos orgânicos', criado_em: D('2026-05-20T10:00:00Z'), actualizado_em: D('2026-05-29T10:00:00Z') },
+      { id: 2, nome: 'Visita Institucional - IST', criado_por_id: 4, responsavel_id: 7, laboratorio_id: 2, tipo: 'visita', estado: 'pendente', num_participantes: 15, precisa_assistente: true, observacoes: 'Visita guiada de estudantes do IST', criado_em: D('2026-05-25T10:00:00Z') },
+      { id: 3, nome: 'Projeto Síntese Verde', criado_por_id: 7, responsavel_id: 7, laboratorio_id: 3, tipo: 'projecto', estado: 'revisado_dlab', num_participantes: 4, precisa_assistente: true, observacoes: 'Projeto de síntese de compostos verdes', criado_em: D('2026-05-22T10:00:00Z'), actualizado_em: D('2026-05-27T10:00:00Z') },
+      { id: 4, nome: 'Estágio - Análise de Águas', criado_por_id: 1, responsavel_id: 1, laboratorio_id: 3, tipo: 'estagio', estado: 'pendente', num_participantes: 1, precisa_assistente: false, observacoes: 'Estágio de análise de águas residuais', criado_em: D('2026-05-28T10:00:00Z') },
+      { id: 5, nome: 'Aula Física Aplicada', criado_por_id: 1, responsavel_id: 1, laboratorio_id: 2, tipo: 'aula', estado: 'revisado_dlab', num_participantes: 20, precisa_assistente: false, observacoes: 'Aula sobre movimento oscilatório', criado_em: D('2026-05-15T10:00:00Z'), actualizado_em: D('2026-05-26T10:00:00Z') },
+      { id: 6, nome: 'Aula Química Analítica', criado_por_id: 7, responsavel_id: 7, laboratorio_id: 3, tipo: 'aula', estado: 'rejeitado', num_participantes: 18, precisa_assistente: false, observacoes: 'Aula sobre titulações', criado_em: D('2026-05-10T10:00:00Z'), actualizado_em: D('2026-05-20T10:00:00Z') },
     ],
   });
 
@@ -144,12 +144,12 @@ async function run() {
   });
   await prisma.projecto.createMany({
     data: [
-      { id: 1, actividade_id: 3, responsavel_id: 7, titulo: 'Síntese de Compostos Verdes', descricao: 'Desenvolvimento de métodos de síntese sustentável', data_inicio: D('2026-06-01T00:00:00Z'), data_fim: D('2026-12-31T00:00:00Z'), criado_em: D('2026-05-22T10:00:00Z') },
+      { id: 1, actividade_id: 3, titulo: 'Síntese de Compostos Verdes', descricao: 'Desenvolvimento de métodos de síntese sustentável', data_inicio: D('2026-06-01T00:00:00Z'), data_fim: D('2026-12-31T00:00:00Z'), criado_em: D('2026-05-22T10:00:00Z') },
     ],
   });
   await prisma.estagio.createMany({
     data: [
-      { id: 1, actividade_id: 4, responsavel_id: 1, estudante_id: 20210001, data_inicio: D('2026-07-01T00:00:00Z'), data_fim: D('2026-12-31T00:00:00Z'), criado_em: D('2026-05-28T10:00:00Z') },
+      { id: 1, actividade_id: 4, estudante_id: 20210001, data_inicio: D('2026-07-01T00:00:00Z'), data_fim: D('2026-12-31T00:00:00Z'), criado_em: D('2026-05-28T10:00:00Z') },
     ],
   });
 

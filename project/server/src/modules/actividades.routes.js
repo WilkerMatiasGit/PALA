@@ -16,7 +16,32 @@ const router = Router();
 router.use(authRequired);
 const ACT_ROLES = ['admin', 'professor', 'coordenador_dlab', 'supervisor', 'chefe_departamento'];
 
-const actInclude = { utilizador: true, laboratorio: true };
+const actInclude = { criado_por: true, responsavel: true, laboratorio: true };
+
+// Roles que podem designar um terceiro como responsável (RF02 + regra de responsabilidade)
+const PODE_DESIGNAR = ['admin', 'coordenador_dlab', 'supervisor', 'chefe_departamento'];
+
+// Regra de responsabilidade:
+//  - o autor (criado_por_id) é sempre o utilizador autenticado;
+//  - se o utilizador for Professor, criado_por_id = responsavel_id = o próprio;
+//  - caso contrário (admin/coord/supervisor/chefe), o responsável é o indicado (default: próprio).
+//  - o responsável tem de ser o próprio utilizador ou um Professor; para "aula", tem de ser Professor.
+async function resolverResponsavel(req, body, tipo) {
+  if (req.user.tipo === 'professor') return req.user.id;
+  const id = body.responsavel_id != null ? Number(body.responsavel_id) : req.user.id;
+  const u = await prisma.utilizador.findUnique({ where: { id } });
+  if (!u || !u.activo) {
+    throw HTTP(400, 'Utilizador responsável inválido');
+  }
+  const ehProprio = u.id === req.user.id;
+  const ehProfessor = u.tipo === 'professor';
+  if (tipo === 'aula') {
+    if (!ehProfessor) throw HTTP(400, 'Para o tipo "aula", o responsável tem de ser um professor');
+  } else if (!(ehProprio || ehProfessor)) {
+    throw HTTP(400, 'O responsável deve ser o próprio utilizador ou um professor');
+  }
+  return u.id;
+}
 
 // ---- CRUD Actividades ----
 
@@ -28,7 +53,7 @@ router.get('/', async (req, res, next) => {
     if (req.query.estado) where.estado = req.query.estado;
     if (req.query.laboratorio_id) where.laboratorio_id = Number(req.query.laboratorio_id);
     if (req.user.tipo === 'professor') {
-      where.utilizador_id = req.user.id;
+      where.responsavel_id = req.user.id;
     } else if (req.user.tipo === 'tecnico') {
       where.atividadeTecnicos = { some: { activo: true, utilizador_id: req.user.id } };
     }
@@ -53,14 +78,16 @@ router.get('/:id', async (req, res, next) => {
 // POST /actividades — criar
 router.post('/', rbac(...ACT_ROLES), async (req, res, next) => {
   try {
-    const { nome, utilizador_id, laboratorio_id, num_participantes, observacoes, precisa_assistente, tipo } = req.body || {};
+    const { nome, responsavel_id, laboratorio_id, num_participantes, observacoes, precisa_assistente, tipo } = req.body || {};
     if (!nome || !laboratorio_id || !tipo) {
       return res.status(400).json({ message: 'nome, laboratorio_id e tipo são obrigatórios' });
     }
+    const respId = await resolverResponsavel(req, { responsavel_id }, tipo);
     const novo = await prisma.actividade.create({
       data: {
         nome,
-        utilizador_id: Number(utilizador_id || req.user.id),
+        criado_por_id: req.user.id,
+        responsavel_id: respId,
         laboratorio_id: Number(laboratorio_id),
         tipo,
         estado: 'pendente',
@@ -81,15 +108,21 @@ router.put('/:id', rbac(...ACT_ROLES), async (req, res, next) => {
   try {
     const a = await prisma.actividade.findUnique({ where: { id: Number(req.params.id) } });
     if (!a) return res.status(404).json({ message: 'Atividade não encontrada' });
-    const { nome, utilizador_id, laboratorio_id, num_participantes, observacoes, precisa_assistente, tipo } = req.body || {};
+    const { nome, responsavel_id, laboratorio_id, num_participantes, observacoes, precisa_assistente, tipo } = req.body || {};
     const data = {};
     if (nome !== undefined) data.nome = nome;
-    if (utilizador_id !== undefined) data.utilizador_id = Number(utilizador_id);
     if (laboratorio_id !== undefined) data.laboratorio_id = Number(laboratorio_id);
     if (num_participantes !== undefined) data.num_participantes = num_participantes;
     if (observacoes !== undefined) data.observacoes = observacoes;
     if (precisa_assistente !== undefined) data.precisa_assistente = !!precisa_assistente;
     if (tipo !== undefined) data.tipo = tipo;
+    // o responsável apenas pode ser alterado por quem pode designar terceiros
+    if (responsavel_id !== undefined && PODE_DESIGNAR.includes(req.user.tipo)) {
+      const novoTipo = tipo || a.tipo;
+      data.responsavel_id = await resolverResponsavel(req, { responsavel_id }, novoTipo);
+    } else if (req.user.tipo === 'professor') {
+      data.responsavel_id = req.user.id;
+    }
     const atualizado = await prisma.actividade.update({ where: { id: a.id }, data, include: actInclude });
     res.json(toActividadeGet(atualizado));
   } catch (err) {
@@ -125,9 +158,8 @@ function montarDetalhes(tipo, det) {
         ? { nome_visitante: d.nome_visitante, instituicao: d.instituicao || null, telefone: d.telefone, email: d.email }
         : null;
     case 'projecto':
-      return d.responsavel_id != null && d.titulo && d.data_inicio && d.data_fim
+      return d.titulo && d.data_inicio && d.data_fim
         ? {
-            responsavel_id: Number(d.responsavel_id),
             titulo: d.titulo,
             descricao: d.descricao || '',
             data_inicio: new Date(d.data_inicio),
@@ -135,9 +167,8 @@ function montarDetalhes(tipo, det) {
           }
         : null;
     case 'estagio':
-      return d.responsavel_id != null && d.estudante_id != null && d.data_inicio && d.data_fim
+      return d.estudante_id != null && d.data_inicio && d.data_fim
         ? {
-            responsavel_id: Number(d.responsavel_id),
             estudante_id: Number(d.estudante_id),
             data_inicio: new Date(d.data_inicio),
             data_fim: new Date(d.data_fim),
@@ -233,7 +264,7 @@ async function crearMateriais(tx, actividadeId, mats) {
 // POST /actividades/full — criação atómica (tudo ou nada)
 router.post('/full', rbac(...ACT_ROLES), async (req, res, next) => {
   try {
-    const { nome, utilizador_id, laboratorio_id, num_participantes, observacoes, precisa_assistente, tipo, detalhes, agendamentos, materiais } = req.body || {};
+    const { nome, responsavel_id, laboratorio_id, num_participantes, observacoes, precisa_assistente, tipo, detalhes, agendamentos, materiais } = req.body || {};
     if (!nome || !laboratorio_id || !tipo) {
       return res.status(400).json({ message: 'nome, laboratorio_id e tipo são obrigatórios' });
     }
@@ -243,6 +274,7 @@ router.post('/full', rbac(...ACT_ROLES), async (req, res, next) => {
     const lab = await prisma.laboratorio.findUnique({ where: { id: Number(laboratorio_id) } });
     if (!lab || !lab.activo) return res.status(404).json({ message: 'Laboratório não encontrado' });
 
+    const respId = await resolverResponsavel(req, { responsavel_id }, tipo);
     const ags = (agendamentos || []).filter((g) => g && g.hora_inicio && g.hora_fim);
     const mats = (materiais || []).filter((r) => r && r.material_id != null);
 
@@ -256,7 +288,8 @@ router.post('/full', rbac(...ACT_ROLES), async (req, res, next) => {
       const act = await tx.actividade.create({
         data: {
           nome,
-          utilizador_id: Number(utilizador_id || req.user.id),
+          criado_por_id: req.user.id,
+          responsavel_id: respId,
           laboratorio_id: Number(laboratorio_id),
           tipo,
           estado: 'pendente',
@@ -283,7 +316,7 @@ router.put('/:id/full', rbac(...ACT_ROLES), async (req, res, next) => {
     const act = await prisma.actividade.findUnique({ where: { id: Number(req.params.id) } });
     if (!act || !act.activo) return res.status(404).json({ message: 'Atividade não encontrada' });
 
-    const { nome, utilizador_id, laboratorio_id, num_participantes, observacoes, precisa_assistente, tipo, detalhes, agendamentos, materiais } = req.body || {};
+    const { nome, responsavel_id, laboratorio_id, num_participantes, observacoes, precisa_assistente, tipo, detalhes, agendamentos, materiais } = req.body || {};
     const novoTipo = tipo || act.tipo;
     const novoLabId = laboratorio_id != null ? Number(laboratorio_id) : act.laboratorio_id;
     if (!['aula', 'visita', 'projecto', 'estagio'].includes(novoTipo)) {
@@ -291,6 +324,15 @@ router.put('/:id/full', rbac(...ACT_ROLES), async (req, res, next) => {
     }
     const lab = await prisma.laboratorio.findUnique({ where: { id: novoLabId } });
     if (!lab || !lab.activo) return res.status(404).json({ message: 'Laboratório não encontrado' });
+
+    // responsável: alterar apenas se enviado e o utilizador puder designar terceiros;
+    // professor mantém-se (ou volta) como responsável da própria atividade.
+    let respId;
+    if (responsavel_id !== undefined && PODE_DESIGNAR.includes(req.user.tipo)) {
+      respId = await resolverResponsavel(req, { responsavel_id }, novoTipo);
+    } else if (req.user.tipo === 'professor') {
+      respId = req.user.id;
+    }
 
     const ags = (agendamentos || []).filter((g) => g && g.hora_inicio && g.hora_fim);
     const mats = (materiais || []).filter((r) => r && r.material_id != null);
@@ -300,7 +342,7 @@ router.put('/:id/full', rbac(...ACT_ROLES), async (req, res, next) => {
 
     const data = {};
     if (nome !== undefined) data.nome = nome;
-    if (utilizador_id !== undefined) data.utilizador_id = Number(utilizador_id);
+    if (respId !== undefined) data.responsavel_id = respId;
     if (laboratorio_id !== undefined) data.laboratorio_id = Number(laboratorio_id);
     if (num_participantes !== undefined) data.num_participantes = num_participantes;
     if (observacoes !== undefined) data.observacoes = observacoes;
@@ -370,7 +412,6 @@ router.get('/:id/projecto', async (req, res, next) => {
   try {
     const p = await prisma.projecto.findFirst({
       where: { actividade_id: Number(req.params.id), activo: true },
-      include: { responsavel: true },
     });
     res.json(p ? toProjectoGet(p) : null);
   } catch (err) {
@@ -382,7 +423,7 @@ router.get('/:id/estagio', async (req, res, next) => {
   try {
     const e = await prisma.estagio.findFirst({
       where: { actividade_id: Number(req.params.id), activo: true },
-      include: { responsavel: true, estudante: true },
+      include: { estudante: true },
     });
     res.json(e ? toEstagioGet(e) : null);
   } catch (err) {
