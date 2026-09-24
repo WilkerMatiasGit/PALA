@@ -17,7 +17,7 @@ export const relatoriosService = {
   },
 
   // POST /relatorios — gerar contagens (criador derivado do JWT)
-  async create(data: RelatorioCreate, _criadoPor?: number, _criadoPorNome?: string): Promise<RelatorioGet> {
+  async create(data: RelatorioCreate): Promise<RelatorioGet> {
     try {
       const { data: created } = await api.post<RelatorioGet>('/relatorios', data);
       return created;

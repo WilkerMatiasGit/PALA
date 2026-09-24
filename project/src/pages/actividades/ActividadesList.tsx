@@ -54,6 +54,10 @@ export default function ActividadesList() {
 
   const filtered = useMemo(() => {
     let result = [...data];
+    if (filters.nome) {
+      const q = filters.nome.toLowerCase();
+      result = result.filter((a) => a.nome.toLowerCase().includes(q));
+    }
     if (filters.tipo) result = result.filter((a) => a.tipo === filters.tipo);
     if (filters.estado) result = result.filter((a) => a.estado === filters.estado);
     if (filters.lab) result = result.filter((a) => String(a.laboratorio_id) === filters.lab);
@@ -64,6 +68,7 @@ export default function ActividadesList() {
   const pageData = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const filterFields: FilterField[] = [
+    { key: 'nome', label: 'Nome', type: 'text', placeholder: 'Pesquisar...' },
     { key: 'tipo', label: 'Tipo', type: 'select', options: ACTIVIDADE_TIPO_OPTIONS },
     { key: 'estado', label: 'Estado', type: 'select', options: ESTADO_OPTIONS },
     { key: 'lab', label: 'Laboratório', type: 'select', options: labs.map((l) => ({ value: String(l.id), label: l.nome })) },

@@ -19,8 +19,10 @@ import { materiaisService } from '@/services/materiais.service';
 import { laboratoriosService } from '@/services/laboratorios.service';
 import { useAuth } from '@/context/AuthContext';
 import { hasRole } from '@/utils/roleGuard';
-import { MATERIAL_CATEGORIA_OPTIONS, MATERIAL_ESTADO_OPTIONS, MATERIAL_CATEGORIA_LABELS, MATERIAL_ESTADO_LABELS } from '@/services/enums';
+import { MATERIAL_ESTADO_OPTIONS } from '@/services/enums';
+import { catalogoLabel } from '@/utils/catalogo';
 import { formatMaterialEstado } from '@/utils/formatEstado';
+import { categoriasMaterialService } from '@/services/catalogos.service';
 import type { MaterialGet } from '@/types/material.types';
 import type { LaboratorioGet } from '@/types/laboratorio.types';
 import { PAGE_SIZE } from '@/utils/constants';
@@ -33,6 +35,7 @@ export default function MateriaisList() {
   const navigate = useNavigate();
   const [data, setData] = useState<MaterialGet[]>([]);
   const [labs, setLabs] = useState<LaboratorioGet[]>([]);
+  const [categorias, setCategorias] = useState<{ value: string; label: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [filters, setFilters] = useState<Record<string, string>>({});
@@ -44,8 +47,8 @@ export default function MateriaisList() {
 
   const load = () => {
     setLoading(true); setError(false);
-    Promise.all([materiaisService.list(), laboratoriosService.list()])
-      .then(([m, l]) => { setData(m); setLabs(l); })
+    Promise.all([materiaisService.list(), laboratoriosService.list(), categoriasMaterialService.list()])
+      .then(([m, l, c]) => { setData(m); setLabs(l); setCategorias(c.map((cat) => ({ value: cat.nome, label: catalogoLabel(cat.nome) }))); })
       .catch(() => setError(true)).finally(() => setLoading(false));
   };
 
@@ -53,6 +56,10 @@ export default function MateriaisList() {
 
   const filtered = useMemo(() => {
     let result = [...data];
+    if (filters.nome) {
+      const q = filters.nome.toLowerCase();
+      result = result.filter((m) => m.nome.toLowerCase().includes(q));
+    }
     if (filters.lab) result = result.filter((m) => String(m.laboratorio_id) === filters.lab);
     if (filters.categoria) result = result.filter((m) => m.categoria === filters.categoria);
     if (filters.estado) result = result.filter((m) => m.estado === filters.estado);
@@ -63,8 +70,9 @@ export default function MateriaisList() {
   const pageData = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const filterFields: FilterField[] = [
+    { key: 'nome', label: 'Nome', type: 'text', placeholder: 'Pesquisar...' },
     { key: 'lab', label: 'Laboratório', type: 'select', options: labs.map((l) => ({ value: String(l.id), label: l.nome })) },
-    { key: 'categoria', label: 'Categoria', type: 'select', options: MATERIAL_CATEGORIA_OPTIONS },
+    { key: 'categoria', label: 'Categoria', type: 'select', options: categorias },
     { key: 'estado', label: 'Estado', type: 'select', options: MATERIAL_ESTADO_OPTIONS },
   ];
 
@@ -102,7 +110,7 @@ export default function MateriaisList() {
                 return (
                   <TableRow key={m.id} className="cursor-pointer" onClick={() => navigate(`/materiais/${m.id}`)}>
                     <TableCell className="font-medium">{m.nome}</TableCell>
-                    <TableCell><Badge variant="secondary">{MATERIAL_CATEGORIA_LABELS[m.categoria]}</Badge></TableCell>
+                    <TableCell><Badge variant="secondary">{catalogoLabel(m.categoria)}</Badge></TableCell>
                     <TableCell>
                       <span className={lowStock ? 'font-bold text-red-600' : ''}>{m.quantidade} {m.unidade}</span>
                       {lowStock && <StockAlertBadge quantidade={m.quantidade} minima={m.quantidade_minima} className="ml-1" />}

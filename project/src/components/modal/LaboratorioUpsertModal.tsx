@@ -5,10 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
+import { SearchSelect } from '@/components/ui/search-select';
 import { laboratoriosService } from '@/services/laboratorios.service';
-import { LABORATORIO_TIPO_OPTIONS } from '@/services/enums';
+import { unidadesLaboratoriaisService } from '@/services/catalogos.service';
 import type { LaboratorioGet, LaboratorioUpsert } from '@/types/laboratorio.types';
 
 interface Props {
@@ -21,25 +21,41 @@ interface Props {
 export function LaboratorioUpsertModal({ open, onOpenChange, laboratorio, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
   const [nome, setNome] = useState(laboratorio?.nome ?? '');
-  const [tipo, setTipo] = useState(laboratorio?.tipo ?? 'quimica');
+  const [tipo, setTipo] = useState(laboratorio?.tipo ?? '');
   const [descricao, setDescricao] = useState(laboratorio?.descricao ?? '');
+  const [unidades, setUnidades] = useState<{ value: string; label: string }[]>([]);
   const [labs, setLabs] = useState<LaboratorioGet[]>([]);
 
-  useEffect(() => { laboratoriosService.list().then(setLabs); }, []);
+  const loadUnidades = async () => {
+    const rows = await unidadesLaboratoriaisService.list();
+    setUnidades(rows.map((u) => ({ value: u.nome, label: u.nome })));
+  };
+
+  useEffect(() => {
+    loadUnidades().catch(() => {});
+    laboratoriosService.list().then(setLabs).catch(() => {});
+  }, []);
 
   const handleOpenChange = (v: boolean) => {
     if (v) {
       setNome(laboratorio?.nome ?? '');
-      setTipo(laboratorio?.tipo ?? 'quimica');
+      setTipo(laboratorio?.tipo ?? '');
       setDescricao(laboratorio?.descricao ?? '');
     }
     onOpenChange(v);
+  };
+
+  const handleCreateUnidade = async (novoTipo: string) => {
+    await unidadesLaboratoriaisService.create({ nome: novoTipo });
+    await loadUnidades();
+    toast.success(`Unidade laboratorial "${novoTipo}" criada`);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const nomeTrim = nome.trim();
     if (!nomeTrim) { toast.error('Indique o nome do laboratório'); return; }
+    if (!tipo) { toast.error('Selecione a unidade laboratorial'); return; }
     const duplicado = labs.some((l) => l.id !== laboratorio?.id && l.nome.toLowerCase() === nomeTrim.toLowerCase());
     if (duplicado) { toast.error('Já existe um laboratório com este nome'); return; }
     setSaving(true);
@@ -72,14 +88,14 @@ export function LaboratorioUpsertModal({ open, onOpenChange, laboratorio, onSave
           </div>
           <div className="space-y-2">
             <Label>Unidade Laboratorial</Label>
-            <Select value={tipo} onValueChange={(v) => setTipo(v as typeof tipo)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {LABORATORIO_TIPO_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchSelect
+              value={tipo}
+              onValueChange={setTipo}
+              options={unidades}
+              placeholder="Selecionar unidade..."
+              canCreate
+              onCreate={handleCreateUnidade}
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="descricao">Descrição</Label>

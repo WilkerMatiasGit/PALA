@@ -2,13 +2,12 @@ import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { relatoriosService } from '@/services/relatorios.service';
 import { laboratoriosService } from '@/services/laboratorios.service';
-import { useAuth } from '@/context/AuthContext';
 import { MESES } from '@/utils/constants';
 import type { LaboratorioGet } from '@/types/laboratorio.types';
 
@@ -19,7 +18,6 @@ interface Props {
 }
 
 export function RelatorioUpsertModal({ open, onOpenChange, onSaved }: Props) {
-  const { user } = useAuth();
   const [saving, setSaving] = useState(false);
   const [labs, setLabs] = useState<LaboratorioGet[]>([]);
   const [labId, setLabId] = useState('');
@@ -38,7 +36,7 @@ export function RelatorioUpsertModal({ open, onOpenChange, onSaved }: Props) {
     if (!labId) { toast.error('Selecione um laboratório'); return; }
     setSaving(true);
     try {
-      await relatoriosService.create({ laboratorio_id: Number(labId), mes: Number(mes), ano: Number(ano) }, user?.id ?? 0, user?.nome ?? '');
+      await relatoriosService.create({ laboratorio_id: Number(labId), mes: Number(mes), ano: Number(ano) });
       toast.success('Relatório gerado');
       onSaved();
       onOpenChange(false);
@@ -71,7 +69,7 @@ export function RelatorioUpsertModal({ open, onOpenChange, onSaved }: Props) {
             </div>
             <div className="space-y-2">
               <Label htmlFor="ano">Ano</Label>
-              <Input id="ano" type="number" required value={ano} onChange={(e) => setAno(e.target.value)} />
+              <NumberInput id="ano" allowDecimal={false} required value={ano} onValueChange={setAno} />
             </div>
           </div>
           <DialogFooter>

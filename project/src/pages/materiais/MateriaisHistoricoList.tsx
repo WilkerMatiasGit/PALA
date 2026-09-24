@@ -1,5 +1,4 @@
 import { useEffect, useState, useMemo } from 'react';
-import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -43,7 +42,10 @@ export default function MateriaisHistoricoList() {
 
   const filtered = useMemo(() => {
     let result = [...data];
-    if (filters.material_id) result = result.filter((h) => String(h.material_id) === filters.material_id);
+    if (filters.material) {
+      const q = filters.material.toLowerCase();
+      result = result.filter((h) => (h.material_nome ?? '').toLowerCase().includes(q));
+    }
     if (filters.motivo) result = result.filter((h) => h.motivo === filters.motivo);
     return result;
   }, [data, filters]);
@@ -52,7 +54,7 @@ export default function MateriaisHistoricoList() {
   const pageData = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const filterFields: FilterField[] = [
-    { key: 'material_id', label: 'Material', type: 'select', options: materiais.map((m) => ({ value: String(m.id), label: m.nome })) },
+    { key: 'material', label: 'Material', type: 'text', placeholder: 'Pesquisar...' },
     { key: 'motivo', label: 'Motivo', type: 'select', options: MOVIMENTACAO_MOTIVO_OPTIONS },
   ];
 

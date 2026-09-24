@@ -2,7 +2,7 @@
 // Convenções usadas:
 //  - Modelos em PascalCase; tabelas mapeadas para nomes snake_case via @@map.
 //  - BaseEntity: id, criado_em, actualizado_em, activo (soft delete).
-//  - Enums MySQL espelham os enums do AGENTS.md.
+//  - Enums espelham os enums do AGENTS.md (compatíveis MySQL e Postgres).
 //  - As relações preservam integridade referencial; os nomes denormalizados
 //    (ex: laboratorio_nome) são derivados por include/queries nas rotas.
 
@@ -11,16 +11,10 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
 }
 
 // ============================ ENUMS ============================
-
-enum LaboratorioTipo {
-  quimica
-  fisica
-  outro
-}
 
 enum DepartamentoTipo {
   DET
@@ -68,13 +62,6 @@ enum AprovacaoEtapa {
 enum AprovacaoDecisao {
   aprovado
   rejeitado
-}
-
-enum MaterialCategoria {
-  equipamento
-  composto
-  vidraria
-  consumivel
 }
 
 enum MaterialEstado {
@@ -184,14 +171,56 @@ model CursoDisciplina {
 
 // ============================ INFRAESTRUTURA E RECURSOS ============================
 
-model Laboratorio {
-  id          Int            @id @default(autoincrement())
-  nome        String
-  tipo        LaboratorioTipo
+// Catálogo de tipos de laboratório (ex.: química, física, outro) — CRUD (PLANO.md §2.1)
+model UnidadeLaboratorial {
+  id          Int      @id @default(autoincrement())
+  nome        String   @unique // chave estável usada nos DTOs (ex.: "quimica")
   descricao   String?
-  criado_em   DateTime       @default(now())
-  actualizado_em DateTime    @updatedAt
-  activo      Boolean        @default(true)
+  criado_em   DateTime @default(now())
+  actualizado_em DateTime @updatedAt
+  activo      Boolean  @default(true)
+
+  laboratorios Laboratorio[]
+
+  @@map("unidades_laboratoriais")
+}
+
+// Catálogo de categorias de material (equipamento, composto, vidraria, consumivel) — CRUD
+model CategoriaMaterial {
+  id          Int      @id @default(autoincrement())
+  nome        String   @unique
+  criado_em   DateTime @default(now())
+  actualizado_em DateTime @updatedAt
+  activo      Boolean  @default(true)
+
+  materiais Material[]
+
+  @@map("categorias_material")
+}
+
+// Catálogo global de unidades de medida (ml, un, g, litro, kg, ...) — CRUD
+model Unidade {
+  id          Int      @id @default(autoincrement())
+  nome        String   @unique
+  criado_em   DateTime @default(now())
+  actualizado_em DateTime @updatedAt
+  activo      Boolean  @default(true)
+
+  materiais Material[]
+
+  @@map("unidades")
+}
+
+model Laboratorio {
+  id                      Int      @id @default(autoincrement())
+  nome                    String
+  unidade_laboratorial_id Int
+  descricao               String?
+  criado_em               DateTime @default(now())
+  actualizado_em          DateTime @updatedAt
+  activo                  Boolean  @default(true)
+
+  unidadeLaboratorial UnidadeLaboratorial @relation(fields: [unidade_laboratorial_id], references: [id])
 
   materiais   Material[]
   actividades Actividade[]
@@ -204,17 +233,19 @@ model Material {
   id             Int             @id @default(autoincrement())
   laboratorio_id Int
   nome           String
-  categoria      MaterialCategoria
+  categoria_id   Int
   quantidade     Int // cache do SUM(histórico) — RF17 (nunca editado diretamente)
   quantidade_minima Int
-  unidade        String
+  unidade_id     Int?
   estado         MaterialEstado
   criado_em      DateTime        @default(now())
   actualizado_em DateTime        @updatedAt
   activo         Boolean         @default(true)
 
-  laboratorio    Laboratorio     @relation(fields: [laboratorio_id], references: [id])
-  historico      HistoricoMaterial[]
+  laboratorio Laboratorio     @relation(fields: [laboratorio_id], references: [id])
+  categoria   CategoriaMaterial @relation(fields: [categoria_id], references: [id])
+  unidade     Unidade?        @relation(fields: [unidade_id], references: [id])
+  historico   HistoricoMaterial[]
   atividadeMateriais ActividadeMaterial[]
 
   @@map("materiais")
@@ -306,7 +337,7 @@ model ActividadeMaterial {
 
 model Aprovacao {
   id           Int             @id @default(autoincrement())
-  agendamento_id Int?          // NULL em decisões ao nível da atividade (conclusão/rejeição)
+  agendamento_id Int?          // NULL em decisões em lote e em decisões ao nível da atividade (conclusão/rejeição)
   actividade_id Int?           // atividade à qual a decisão se refere (preenchida sempre)
   aprovador_id Int
   etapa        AprovacaoEtapa
@@ -321,7 +352,41 @@ model Aprovacao {
   actividade  Actividade?  @relation(fields: [actividade_id], references: [id])
   aprovador   Utilizador   @relation(fields: [aprovador_id], references: [id])
 
+  aprovacaoAgendamentos AprovacaoAgendamento[]
+
   @@map("aprovacoes")
+}
+
+// Decisão em LOTE: uma Aprovacao (sem agendamento_id) + N linhas com a decisão de
+// cada agendamento afetado. Comentário único na Aprovacao (como definido no PLANO.md).
+model AprovacaoAgendamento {
+  id             Int             @id @default(autoincrement())
+  aprovacao_id   Int
+  agendamento_id Int
+  decisao        AprovacaoDecisao
+  criado_em      DateTime        @default(now())
+  actualizado_em DateTime        @updatedAt
+  activo         Boolean         @default(true)
+
+  aprovacao   Aprovacao   @relation(fields: [aprovacao_id], references: [id])
+  agendamento Agendamento @relation(fields: [agendamento_id], references: [id])
+
+  @@unique([aprovacao_id, agendamento_id])
+  @@map("aprovacao_agendamentos")
+}
+
+// Fluxo de aprovação configurável (PLANO.md §3): passos ordenados, cada um com a
+// lista de cargos (UtilizadorTipo) que votam nessa fase.
+model FluxoAprovacao {
+  id             Int    @id @default(autoincrement())
+  nome           String @unique // identificador único do passo (ex.: "dlab", "supervisor")
+  ordem          Int             // ordem do passo no fluxo
+  cargos         Json            // ["coordenador_dlab", "admin"]
+  criado_em      DateTime @default(now())
+  actualizado_em DateTime @updatedAt
+  activo         Boolean @default(true)
+
+  @@map("fluxo_aprovacao")
 }
 
 model Agendamento {
@@ -339,6 +404,7 @@ model Agendamento {
 
   actividade Actividade @relation(fields: [actividade_id], references: [id])
   aprovacoes Aprovacao[]
+  aprovacaoAgendamentos AprovacaoAgendamento[]
 
   @@map("agendamentos")
 }
@@ -420,7 +486,7 @@ model Relatorio {
   criado_por   Int
   mes          Int
   ano          Int
-  dados_json   String @db.LongText
+  dados_json   String @db.Text
   criado_em    DateTime @default(now())
   actualizado_em DateTime @updatedAt
   activo       Boolean  @default(true)

@@ -1,45 +1,20 @@
 import 'dotenv/config';
-import mysql from 'mysql2/promise';
 import { PrismaClient } from '@prisma/client';
-import { PrismaMariaDb } from '@prisma/adapter-mariadb';
+import { PrismaPg } from '@prisma/adapter-pg';
 
-function dbOptionsFromUrl(url) {
-  const u = new URL(url);
-  const connectionLimit = Number(u.searchParams.get('connection_limit')) || 5;
-  return {
-    host: u.hostname,
-    port: Number(u.port) || 3306,
-    user: decodeURIComponent(u.username),
-    password: decodeURIComponent(u.password),
-    database: u.pathname.replace(/^\//, ''),
-    connectionLimit,
-    connectTimeout: 10000,
-    acquireTimeout: 15000,
-  };
+// Prisma ORM 7 exige um driver adapter. Com provider único `postgresql`
+// (dev Postgres local/Docker e staging Neon usam todos URLs `postgres://`);
+// a POOLED connection string da Neon é compatível com o adapter-pg.
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error('DATABASE_URL em falta. Define `postgresql://...` no .env (raiz do projeto).');
 }
 
-// Prisma ORM 7 exige um driver adapter para MySQL/MariaDB.
-const adapter = new PrismaMariaDb(dbOptionsFromUrl(process.env.DATABASE_URL));
-
-// Prisma client singleton — a fonte de dados real (MySQL).
+// Prisma client singleton — a fonte de dados real (Postgres / Neon).
+const adapter = new PrismaPg({ connectionString: connectionString.replace(/^postgres:/, 'postgresql:') });
 export const prisma = new PrismaClient({ adapter });
 
-async function warmUpMysql() {
-  const u = new URL(process.env.DATABASE_URL);
-  const conn = await mysql.createConnection({
-    host: u.hostname,
-    port: Number(u.port) || 3306,
-    user: decodeURIComponent(u.username),
-    password: decodeURIComponent(u.password),
-    database: u.pathname.replace(/^\//, ''),
-    connectTimeout: 10000,
-  });
-  await conn.query('SELECT 1');
-  await conn.end();
-}
-
 export async function initDb() {
-  await warmUpMysql();
   await prisma.$queryRaw`SELECT 1`;
   return prisma;
 }

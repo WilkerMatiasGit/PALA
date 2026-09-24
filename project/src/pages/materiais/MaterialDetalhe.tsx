@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -14,7 +14,8 @@ import { materiaisService } from '@/services/materiais.service';
 import { movimentacoesService } from '@/services/movimentacoes.service';
 import { useAuth } from '@/context/AuthContext';
 import { hasRole } from '@/utils/roleGuard';
-import { MATERIAL_CATEGORIA_LABELS, MOVIMENTACAO_MOTIVO_LABELS } from '@/services/enums';
+import { MOVIMENTACAO_MOTIVO_LABELS } from '@/services/enums';
+import { catalogoLabel } from '@/utils/catalogo';
 import { formatMaterialEstado } from '@/utils/formatEstado';
 import { formatDate } from '@/utils/formatDate';
 import type { MaterialGet, HistoricoMaterialGet } from '@/types/material.types';
@@ -22,7 +23,6 @@ import { Package, Minus, History } from 'lucide-react';
 
 export default function MaterialDetalhe() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const { user } = useAuth();
   const canMov = hasRole(user?.tipo, ['admin', 'tecnico', 'supervisor', 'chefe_departamento']);
   const [material, setMaterial] = useState<MaterialGet | null>(null);
@@ -61,7 +61,7 @@ export default function MaterialDetalhe() {
           <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Package className="h-4 w-4" /> Informação do Material</CardTitle></CardHeader>
           <CardContent className="space-y-3 text-sm">
             <div className="flex justify-between"><span className="text-muted-foreground">Laboratório</span><span className="font-medium">{material.laboratorio_nome}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Categoria</span><Badge variant="secondary">{MATERIAL_CATEGORIA_LABELS[material.categoria]}</Badge></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Categoria</span><Badge variant="secondary">{catalogoLabel(material.categoria)}</Badge></div>
             <div className="flex justify-between items-center">
               <span className="text-muted-foreground">Stock atual</span>
               <div className="flex items-center gap-2">

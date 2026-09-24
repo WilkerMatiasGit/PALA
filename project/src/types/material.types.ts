@@ -1,15 +1,11 @@
-import type {
-  MaterialCategoria,
-  MaterialEstado,
-  MovimentacaoMotivo,
-} from '@/services/enums';
+import type { MaterialEstado, MovimentacaoMotivo } from '@/services/enums';
 
 export interface MaterialGet {
   id: number;
   laboratorio_id: number;
   laboratorio_nome: string;
   nome: string;
-  categoria: MaterialCategoria;
+  categoria: string;
   quantidade: number;
   quantidade_minima: number;
   unidade: string;
@@ -22,7 +18,7 @@ export interface MaterialUpsert {
   id?: number;
   laboratorio_id: number;
   nome: string;
-  categoria: MaterialCategoria;
+  categoria: string;
   quantidade_minima: number;
   unidade: string;
   estado: MaterialEstado;

@@ -1,9 +1,9 @@
 import { api, apiErrorMessage } from './api';
-import type { AprovacaoGet, AprovacaoCreate } from '@/types/aprovacao.types';
+import type { AprovacaoGet, AprovacaoCreate, AprovacaoLote } from '@/types/aprovacao.types';
 
 export const aprovacoesService = {
   // GET /aprovacoes — fila adaptativa (backend decide por role via JWT)
-  async listFila(_userTipo?: string): Promise<AprovacaoGet[]> {
+  async listFila(): Promise<AprovacaoGet[]> {
     const { data } = await api.get<AprovacaoGet[]>('/aprovacoes');
     return data;
   },
@@ -24,9 +24,19 @@ export const aprovacoesService = {
   },
 
   // POST /aprovacoes — voto INDIVIDUAL por agendamento (aprovador derivado do JWT)
-  async create(data: AprovacaoCreate, _aprovadorId?: number): Promise<AprovacaoGet> {
+  async create(data: AprovacaoCreate): Promise<AprovacaoGet> {
     try {
       const { data: created } = await api.post<AprovacaoGet>('/aprovacoes', data);
+      return created;
+    } catch (err) {
+      throw new Error(apiErrorMessage(err));
+    }
+  },
+
+  // POST /aprovacoes/lote — decisão em massa sobre vários agendamentos
+  async createLote(data: AprovacaoLote): Promise<AprovacaoGet> {
+    try {
+      const { data: created } = await api.post<AprovacaoGet>('/aprovacoes/lote', data);
       return created;
     } catch (err) {
       throw new Error(apiErrorMessage(err));

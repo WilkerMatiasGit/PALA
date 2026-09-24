@@ -3,7 +3,6 @@ import type { ReactNode } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import type { UtilizadorTipo } from '@/services/enums';
 import { hasRole } from '@/utils/roleGuard';
-import { FullPageSpinner } from '@/components/ui/spinner';
 
 interface ProtectedRouteProps {
   children: ReactNode;

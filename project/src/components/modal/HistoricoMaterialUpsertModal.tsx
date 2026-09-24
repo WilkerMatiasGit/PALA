@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -93,7 +93,7 @@ export function HistoricoMaterialUpsertModal({ open, onOpenChange, material, onS
           </div>
           <div className="space-y-2">
             <Label htmlFor="hist-qtd">Quantidade</Label>
-            <Input id="hist-qtd" type="number" min={1} required value={quantidade} onChange={(e) => setQuantidade(e.target.value)} />
+            <NumberInput id="hist-qtd" required value={quantidade} onValueChange={setQuantidade} />
           </div>
           <div className="space-y-2">
             <Label>Motivo</Label>

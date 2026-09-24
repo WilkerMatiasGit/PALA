@@ -19,7 +19,13 @@ router.get('/', async (req, res, next) => {
       actividade: { activo: true },
     };
     if (req.query.laboratorio_id) where.actividade.laboratorio_id = Number(req.query.laboratorio_id);
-    if (req.query.mes && req.query.ano) {
+    if (req.query.de && req.query.ate) {
+      const parse = (v) => {
+        const [y, m, d] = String(v).split('-').map(Number);
+        return new Date(y, (m || 1) - 1, d || 1);
+      };
+      where.hora_inicio = { gte: parse(req.query.de), lt: parse(req.query.ate) };
+    } else if (req.query.mes && req.query.ano) {
       const mes = Number(req.query.mes);
       const ano = Number(req.query.ano);
       const start = new Date(ano, mes - 1, 1);

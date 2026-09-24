@@ -10,11 +10,14 @@ import { TableSkeleton } from '@/components/ui/table-skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { FiltersBar, type FilterField } from '@/components/ui/filters-bar';
+import { SimplePagination } from '@/components/ui/simple-pagination';
 import { LaboratorioUpsertModal } from '@/components/modal/LaboratorioUpsertModal';
 import { laboratoriosService } from '@/services/laboratorios.service';
 import { useAuth } from '@/context/AuthContext';
 import { hasRole } from '@/utils/roleGuard';
-import { LABORATORIO_TIPO_LABELS } from '@/services/enums';
+import { catalogoLabel } from '@/utils/catalogo';
+import { PAGE_SIZE } from '@/utils/constants';
 import type { LaboratorioGet } from '@/types/laboratorio.types';
 import { Plus, Pencil, Trash2, ChevronRight, FlaskConical } from 'lucide-react';
 
@@ -29,6 +32,8 @@ export default function LaboratoriosList() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<LaboratorioGet | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<LaboratorioGet | null>(null);
+  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [page, setPage] = useState(1);
 
   const load = () => {
     setLoading(true); setError(false);
@@ -37,18 +42,40 @@ export default function LaboratoriosList() {
 
   useEffect(() => { load(); }, []);
 
+  const filtered = useMemo(() => {
+    let result = [...data];
+    if (filters.nome) result = result.filter((l) => l.nome.toLowerCase().includes(filters.nome.toLowerCase()));
+    if (filters.tipo) result = result.filter((l) => l.tipo === filters.tipo);
+    return result;
+  }, [data, filters]);
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const pageData = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const tipoOptions = useMemo(
+    () => Array.from(new Set(data.map((l) => l.tipo))).map((t) => ({ value: t, label: catalogoLabel(t) })),
+    [data]
+  );
+
+  const filterFields: FilterField[] = [
+    { key: 'nome', label: 'Nome', type: 'text', placeholder: 'Pesquisar...' },
+    { key: 'tipo', label: 'Unidade', type: 'select', options: tipoOptions },
+  ];
+
   return (
     <div>
       <PageHeader title="Laboratórios" description="Gestão de laboratórios." action={
         canEdit ? <Button onClick={() => { setEditing(null); setModalOpen(true); }}><Plus className="mr-2 h-4 w-4" /> Novo Laboratório</Button> : undefined
       } />
 
+      <FiltersBar fields={filterFields} values={filters} onChange={(k, v) => { setFilters({ ...filters, [k]: v }); setPage(1); }} onReset={() => { setFilters({}); setPage(1); }} />
+
       <Card className="p-0">
         {error ? (
           <div className="p-4"><ErrorState onRetry={load} /></div>
         ) : loading ? (
           <div className="p-4"><TableSkeleton rows={4} cols={3} /></div>
-        ) : data.length === 0 ? (
+        ) : pageData.length === 0 ? (
           <EmptyState icon={FlaskConical} title="Sem laboratórios" />
         ) : (
           <Table>
@@ -61,10 +88,10 @@ export default function LaboratoriosList() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.map((lab) => (
+              {pageData.map((lab) => (
                 <TableRow key={lab.id} className={canViewDetalhe ? 'cursor-pointer' : ''} onClick={() => canViewDetalhe && navigate(`/labs/${lab.id}`)}>
                   <TableCell className="font-medium">{lab.nome}</TableCell>
-                  <TableCell><Badge variant="secondary">{LABORATORIO_TIPO_LABELS[lab.tipo]}</Badge></TableCell>
+                  <TableCell><Badge variant="secondary">{catalogoLabel(lab.tipo)}</Badge></TableCell>
                   <TableCell className="max-w-xs truncate text-muted-foreground">{lab.descricao}</TableCell>
                   <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                     <div className="flex justify-end gap-1">
@@ -79,6 +106,8 @@ export default function LaboratoriosList() {
           </Table>
         )}
       </Card>
+
+      <SimplePagination page={page} totalPages={totalPages} onPageChange={setPage} />
 
       <LaboratorioUpsertModal open={modalOpen} onOpenChange={setModalOpen} laboratorio={editing} onSaved={load} />
 

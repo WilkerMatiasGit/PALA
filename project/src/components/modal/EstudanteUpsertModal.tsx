@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
@@ -76,7 +77,7 @@ export function EstudanteUpsertModal({ open, onOpenChange, estudante, onSaved }:
           </div>
           <div className="space-y-2">
             <Label htmlFor="matricula">Nº de matrícula</Label>
-            <Input id="matricula" type="number" disabled={!!estudante} required={!estudante} value={matricula} onChange={(e) => setMatricula(e.target.value)} />
+            <NumberInput id="matricula" allowDecimal={false} disabled={!!estudante} required={!estudante} value={matricula} onValueChange={setMatricula} />
           </div>
           <div className="space-y-2">
             <Label>Curso</Label>

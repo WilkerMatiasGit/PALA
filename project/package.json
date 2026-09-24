@@ -3,22 +3,27 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "workspaces": [
+    "server"
+  ],
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently -n server,web -c blue,green \"npm run dev:server\" \"npm run dev:web\"",
+    "dev:web": "vite",
     "dev:server": "node server/src/index.js",
-    "dev:all": "concurrently -n server,web -c blue,green \"npm run dev:server\" \"npm run dev\"",
+    "deploy": "node scripts/deploy.mjs",
     "db:generate": "prisma generate --schema server/prisma/schema.prisma",
     "db:push": "prisma db push --schema server/prisma/schema.prisma",
     "db:setup": "npm run db:generate && prisma db push --force-reset --schema server/prisma/schema.prisma && node server/scripts/seed-db.js --force",
     "db:migrate": "node server/scripts/seed-db.js --force",
+    "migrate:deploy": "prisma migrate deploy --schema server/prisma/schema.prisma",
     "build": "tsc -b && vite build",
+    "vercel-build": "prisma generate --schema server/prisma/schema.prisma && npm run build",
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json"
   },
   "dependencies": {
-    "@hookform/resolvers": "^3.9.0",
-    "@prisma/adapter-mariadb": "^7.10.0",
+    "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
     "@radix-ui/react-accordion": "^1.2.0",
     "@radix-ui/react-alert-dialog": "^1.1.1",
@@ -48,9 +53,6 @@
     "@radix-ui/react-toggle": "^1.1.0",
     "@radix-ui/react-toggle-group": "^1.1.0",
     "@radix-ui/react-tooltip": "^1.1.2",
-    "@supabase/supabase-js": "^2.58.0",
-    "@tanstack/react-query": "^5.102.6",
-    "@tanstack/react-table": "^9.2.3",
     "argon2": "^0.45.1",
     "axios": "^1.7.9",
     "class-variance-authority": "^0.7.0",
@@ -64,8 +66,8 @@
     "input-otp": "^1.2.4",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.446.0",
-    "mysql2": "^3.15.3",
     "next-themes": "^0.3.0",
+    "pg": "^8.13.1",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",
@@ -76,9 +78,7 @@
     "sonner": "^1.5.0",
     "tailwind-merge": "^2.5.2",
     "tailwindcss-animate": "^1.0.7",
-    "vaul": "^1.0.0",
-    "zod": "^3.23.8",
-    "zustand": "^5.0.15"
+    "vaul": "^1.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.11.1",
@@ -97,6 +97,7 @@
     "tailwindcss": "^3.4.13",
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.7.0",
+    "vercel": "^59.26.0",
     "vite": "^5.4.8"
   },
   "allowScripts": {

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../db.js';
 import { authRequired, rbac } from '../middleware/auth.js';
 import { toAprovacaoGet } from '../utils/dto.js';
+import { podeVotarEtapa } from '../utils/fluxo.js';
 
 // Fila principal /aprovacoes
 const fila = Router();
@@ -25,20 +26,31 @@ function toFilaRow(act) {
   };
 }
 
-// Estado alvo da fila por role: DLab/admin vêem pendente; Supervisor/admin vêem revisado_dlab
-function estadoFila(userTipo) {
-  return userTipo === 'supervisor' ? 'revisado_dlab' : 'pendente';
+const APROVACAO_INCLUDE = {
+  aprovador: true,
+  agendamento: { include: { actividade: { select: { nome: true } } } },
+  actividade: { select: { nome: true } },
+  aprovacaoAgendamentos: { include: { agendamento: { include: { actividade: { select: { nome: true } } } } } },
+};
+
+// Estado alvo da fila por role, derivado do fluxo configurável (PLANO.md §3):
+// quem vota na etapa superior vê revisado_dlab; quem vota só no DLab vê pendente;
+// quem vota em ambas (ex.: admin) vê as duas.
+async function estadosFila(userTipo) {
+  if (userTipo === 'admin') return { in: ['pendente', 'revisado_dlab'] };
+  const sup = await podeVotarEtapa('supervisor', userTipo);
+  const dlab = await podeVotarEtapa('dlab', userTipo);
+  if (sup && !dlab) return 'revisado_dlab';
+  if (dlab && !sup) return 'pendente';
+  if (sup && dlab) return { in: ['pendente', 'revisado_dlab'] };
+  return 'pendente'; // leitor (chefe_departamento, etc.)
 }
 
 // GET /aprovacoes — fila adaptativa (RF09/RF10). Admin vê ambas as etapas.
 fila.get('/', async (req, res, next) => {
   try {
     const where = { activo: true };
-    if (req.user.tipo === 'admin') {
-      where.estado = { in: ['pendente', 'revisado_dlab'] };
-    } else {
-      where.estado = estadoFila(req.user.tipo);
-    }
+    where.estado = await estadosFila(req.user.tipo);
     const acts = await prisma.actividade.findMany({
       where,
       orderBy: { id: 'asc' },
@@ -76,12 +88,9 @@ fila.post('/', async (req, res, next) => {
     if (!['aprovado', 'rejeitado'].includes(decisao)) return res.status(400).json({ message: 'decisao inválida' });
     const texto = (comentario || '').trim();
 
-    // RBAC por etapa
-    if (etapa === 'dlab' && !['coordenador_dlab', 'admin'].includes(req.user.tipo)) {
-      return res.status(403).json({ message: 'Só o Coordenador DLab pode votar nesta etapa' });
-    }
-    if (etapa === 'supervisor' && !['supervisor', 'admin'].includes(req.user.tipo)) {
-      return res.status(403).json({ message: 'Só o Supervisor ou o Admin podem votar nesta etapa' });
+    // RBAC por etapa (configurável)
+    if (!(await podeVotarEtapa(etapa, req.user.tipo))) {
+      return res.status(403).json({ message: 'Não está autorizado a votar nesta etapa' });
     }
 
     const ag = await prisma.agendamento.findUnique({
@@ -132,12 +141,102 @@ fila.post('/', async (req, res, next) => {
           comentario: texto || null,
           decidido_em: new Date(),
         },
-        include: {
-          aprovador: true,
-          agendamento: { include: { actividade: { select: { nome: true } } } },
-          actividade: { select: { nome: true } },
-        },
+        include: APROVACAO_INCLUDE,
       });
+    });
+    res.status(201).json(toAprovacaoGet(nova));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /aprovacoes/lote — decisão EM MASSA sobre vários agendamentos da mesma
+// atividade numa única aprovação (PLANO.md §2.8). Comentário único opcional.
+// Body: { actividadades_etapa..., itens: [{ agendamento_id, decisao }] }
+// Estrutura: { etapa, itens: [{ agendamento_id, decisao }], comentario? }
+fila.post('/lote', async (req, res, next) => {
+  try {
+    const { etapa, itens, comentario } = req.body || {};
+    if (!etapa || !Array.isArray(itens) || itens.length === 0) {
+      return res.status(400).json({ message: 'etapa e itens são obrigatórios' });
+    }
+    if (!['dlab', 'supervisor'].includes(etapa)) return res.status(400).json({ message: 'etapa inválida' });
+    if (!(await podeVotarEtapa(etapa, req.user.tipo))) {
+      return res.status(403).json({ message: 'Não está autorizado a votar nesta etapa' });
+    }
+    if (itens.length > 50) return res.status(400).json({ message: 'Máximo de 50 agendamentos por lote' });
+    const texto = (comentario || '').trim();
+
+    const ids = itens.map((i) => Number(i.agendamento_id));
+    if (ids.some((n) => !Number.isFinite(n))) {
+      return res.status(400).json({ message: 'agendamento_id inválido' });
+    }
+    for (const item of itens) {
+      if (!['aprovado', 'rejeitado'].includes(item.decisao)) {
+        return res.status(400).json({ message: 'decisao inválida (aprovado | rejeitado)' });
+      }
+    }
+
+    const ags = await prisma.agendamento.findMany({
+      where: { id: { in: ids }, activo: true },
+      include: { actividade: true },
+    });
+    if (ags.length !== ids.length) return res.status(404).json({ message: 'Um ou mais agendamentos não existem' });
+
+    const act = ags[0].actividade;
+    if (ags.some((a) => a.actividade_id !== act.id)) {
+      return res.status(400).json({ message: 'Os agendamentos têm de pertencer à mesma atividade' });
+    }
+    if (!act.activo) return res.status(404).json({ message: 'Atividade não encontrada' });
+
+    // Validações de sequência (mesmas do voto individual)
+    for (const ag of ags) {
+      if (etapa === 'dlab') {
+        if (act.estado !== 'pendente') {
+          return res.status(409).json({ message: 'A atividade já não está na fase de revisão do DLab' });
+        }
+        if (ag.estado !== 'nao_revisto') {
+          return res.status(409).json({ message: `Agendamento ${ag.id} já foi decidido ou deixado pendente pelo DLab` });
+        }
+      } else {
+        if (act.estado !== 'revisado_dlab') {
+          return res.status(409).json({ message: 'A atividade ainda não concluiu a revisão do DLab' });
+        }
+        if (ag.estado !== 'aprovado_dlab' && ag.estado !== 'pendente') {
+          return res.status(409).json({ message: `Agendamento ${ag.id} já foi decidido pelo Supervisor` });
+        }
+      }
+    }
+
+    const decisaoLote = itens.every((i) => i.decisao === 'aprovado') ? 'aprovado' : 'rejeitado';
+
+    const nova = await prisma.$transaction(async (tx) => {
+      const ap = await tx.aprovacao.create({
+        data: {
+          agendamento_id: null,
+          actividade_id: act.id,
+          aprovador_id: req.user.id,
+          etapa,
+          decisao: decisaoLote,
+          comentario: texto || null,
+          decidido_em: new Date(),
+        },
+        include: APROVACAO_INCLUDE,
+      });
+      for (const item of itens) {
+        const ag = ags.find((a) => a.id === Number(item.agendamento_id));
+        const novoEstado =
+          item.decisao === 'rejeitado'
+            ? 'rejeitado'
+            : etapa === 'supervisor'
+              ? 'aprovado_supervisor'
+              : 'aprovado_dlab';
+        await tx.agendamento.update({ where: { id: ag.id }, data: { estado: novoEstado } });
+        await tx.aprovacaoAgendamento.create({
+          data: { aprovacao_id: ap.id, agendamento_id: ag.id, decisao: item.decisao },
+        });
+      }
+      return ap;
     });
     res.status(201).json(toAprovacaoGet(nova));
   } catch (err) {
@@ -152,8 +251,8 @@ fila.post('/pendente', async (req, res, next) => {
   try {
     const { agendamento_id } = req.body || {};
     if (!agendamento_id) return res.status(400).json({ message: 'agendamento_id é obrigatório' });
-    if (!['coordenador_dlab', 'admin'].includes(req.user.tipo)) {
-      return res.status(403).json({ message: 'Só o Coordenador DLab pode deixar agendamentos pendentes' });
+    if (!(await podeVotarEtapa('dlab', req.user.tipo))) {
+      return res.status(403).json({ message: 'Não está autorizado a deixar agendamentos pendentes' });
     }
 
     const ag = await prisma.agendamento.findUnique({
@@ -196,10 +295,10 @@ fila.post('/rollback', async (req, res, next) => {
     const act = ag.actividade;
     if (!act.activo) return res.status(404).json({ message: 'Atividade não encontrada' });
 
-    if (etapa === 'dlab' && !['coordenador_dlab', 'admin'].includes(req.user.tipo)) {
-      return res.status(403).json({ message: 'Só o Coordenador DLab pode reverter decisões desta etapa' });
+    if (etapa === 'dlab' && !(await podeVotarEtapa('dlab', req.user.tipo))) {
+      return res.status(403).json({ message: 'Só o Coordenador DLab ou o Admin podem reverter decisões desta etapa' });
     }
-    if (etapa === 'supervisor' && !['supervisor', 'admin'].includes(req.user.tipo)) {
+    if (etapa === 'supervisor' && !(await podeVotarEtapa('supervisor', req.user.tipo))) {
       return res.status(403).json({ message: 'Só o Supervisor ou o Admin podem reverter decisões desta etapa' });
     }
     if (etapa === 'dlab' && act.estado !== 'pendente') {
@@ -210,8 +309,16 @@ fila.post('/rollback', async (req, res, next) => {
     }
 
     const ap = await prisma.aprovacao.findFirst({
-      where: { agendamento_id: ag.id, etapa, activo: true },
+      where: {
+        activo: true,
+        etapa,
+        OR: [
+          { agendamento_id: ag.id },
+          { aprovacaoAgendamentos: { some: { activo: true, agendamento_id: ag.id } } },
+        ],
+      },
       orderBy: { id: 'desc' },
+      include: { aprovacaoAgendamentos: true },
     });
 
     // Estado anterior: etapa DLab → volta a nao_revisto; etapa Supervisor →
@@ -226,18 +333,39 @@ fila.post('/rollback', async (req, res, next) => {
       return res.status(409).json({ message: 'Não existe uma decisão para reverter' });
     }
 
+    const dlabAprovado = await prisma.aprovacaoAgendamento.findFirst({
+      where: {
+        activo: true,
+        agendamento_id: ag.id,
+        decisao: 'aprovado',
+        aprovacao: { etapa: 'dlab', activo: true },
+      },
+    });
     const anterior =
       etapa === 'dlab'
         ? 'nao_revisto'
-        : (await prisma.aprovacao.findFirst({
-            where: { agendamento_id: ag.id, etapa: 'dlab', decisao: 'aprovado', activo: true },
-          }))
+        : dlabAprovado
           ? 'aprovado_dlab'
           : 'pendente';
 
     await prisma.$transaction(async (tx) => {
-      await tx.aprovacao.update({ where: { id: ap.id }, data: { activo: false } });
-      await tx.agendamento.update({ where: { id: ap.agendamento_id }, data: { estado: anterior } });
+      // Voto individual: desativa a aprovação. Voto em lote: remove só este
+      // agendamento do lote; se o lote ficar vazio, desativa-o também.
+      if (ap.agendamento_id != null) {
+        await tx.aprovacao.update({ where: { id: ap.id }, data: { activo: false } });
+      } else {
+        await tx.aprovacaoAgendamento.updateMany({
+          where: { aprovacao_id: ap.id, agendamento_id: ag.id, activo: true },
+          data: { activo: false },
+        });
+        const restantes = await tx.aprovacaoAgendamento.count({
+          where: { aprovacao_id: ap.id, activo: true },
+        });
+        if (restantes === 0) {
+          await tx.aprovacao.update({ where: { id: ap.id }, data: { activo: false } });
+        }
+      }
+      await tx.agendamento.update({ where: { id: ag.id }, data: { estado: anterior } });
     });
     res.json({ message: 'Decisão revertida', estado: anterior });
   } catch (err) {
@@ -322,19 +450,9 @@ fila.post('/:id/finalizar', async (req, res, next) => {
       if (act.estado !== 'revisado_dlab') {
         return res.status(409).json({ message: 'A atividade ainda não concluiu a revisão do DLab' });
       }
-      // Etapa 2: todos os agendamentos têm de estar decididos (aprovado_supervisor ou rejeitado)
-      const porDecidir = await prisma.agendamento.count({
-        where: {
-          activo: true,
-          actividade_id: act.id,
-          estado: { notIn: ['aprovado_supervisor', 'rejeitado'] },
-        },
-      });
-      if (porDecidir > 0) {
-        return res.status(409).json({
-          message: `Ainda existem ${porDecidir} agendamento(s) por decidir na aprovação final`,
-        });
-      }
+      // E0.5 — "Pendentes não bloqueiam avanço": a aprovação final conclui mesmo
+      // com agendamentos ainda não decididos; só os aprovado_supervisor e
+      // rejeitados é que ficam resolvidos — os restantes não entram no calendário.
       // Técnico validador obrigatório (verificado apenas na conclusão — bug 1.4)
       const temValidador = await prisma.actividadeTecnico.count({
         where: { activo: true, actividade_id: act.id, papel: 'validador' },
@@ -380,11 +498,8 @@ fila.post('/:id/rejeitar', async (req, res, next) => {
     if (act.estado === 'revisado_supervisor') return res.status(409).json({ message: 'A revisão final já foi concluída' });
 
     const etapa = act.estado === 'revisado_dlab' ? 'supervisor' : 'dlab';
-    if (etapa === 'supervisor' && !['supervisor', 'admin'].includes(req.user.tipo)) {
-      return res.status(403).json({ message: 'Só o Supervisor ou o Admin podem rejeitar nesta fase' });
-    }
-    if (etapa === 'dlab' && !['coordenador_dlab', 'admin'].includes(req.user.tipo)) {
-      return res.status(403).json({ message: 'Só o Coordenador DLab ou o Admin podem rejeitar nesta fase' });
+    if (!(await podeVotarEtapa(etapa, req.user.tipo))) {
+      return res.status(403).json({ message: 'Não está autorizado a rejeitar nesta fase' });
     }
 
     const nova = await prisma.$transaction(async (tx) => {
@@ -404,11 +519,7 @@ fila.post('/:id/rejeitar', async (req, res, next) => {
           comentario,
           decidido_em: new Date(),
         },
-        include: {
-          aprovador: true,
-          agendamento: { include: { actividade: { select: { nome: true } } } },
-          actividade: { select: { nome: true } },
-        },
+        include: APROVACAO_INCLUDE,
       });
     });
     res.status(201).json(toAprovacaoGet(nova));
@@ -431,13 +542,10 @@ export const historico = (() => {
           OR: [
             { actividade_id: Number(req.params.id) },
             { agendamento: { is: { actividade_id: Number(req.params.id) } } },
+            { aprovacaoAgendamentos: { some: { agendamento: { is: { actividade_id: Number(req.params.id) } } } } },
           ],
         },
-        include: {
-          aprovador: true,
-          agendamento: { include: { actividade: { select: { nome: true } } } },
-          actividade: { select: { nome: true } },
-        },
+        include: APROVACAO_INCLUDE,
         orderBy: { id: 'asc' },
       });
       res.json(rows.map(toAprovacaoGet));

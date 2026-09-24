@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card } from '@/components/ui/card';
@@ -17,10 +18,11 @@ import { hasRole } from '@/utils/roleGuard';
 import type { EstudanteGet } from '@/types/estudantes.types';
 import type { CursoGet } from '@/types/curso.types';
 import { PAGE_SIZE } from '@/utils/constants';
-import { Plus, Pencil, Trash2, Users } from 'lucide-react';
+import { Plus, Pencil, Trash2, ChevronRight, Users } from 'lucide-react';
 
 export default function EstudantesList() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const canEdit = hasRole(user?.tipo, ['admin', 'coordenador_dlab', 'supervisor', 'chefe_departamento']);
   const [data, setData] = useState<EstudanteGet[]>([]);
   const [cursos, setCursos] = useState<CursoGet[]>([]);
@@ -78,23 +80,22 @@ export default function EstudantesList() {
                 <TableHead>Nº Matrícula</TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead>Curso</TableHead>
-                {canEdit && <TableHead className="text-right">Ações</TableHead>}
+                <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {pageData.map((e) => (
-                <TableRow key={e.id}>
+                <TableRow key={e.id} className="cursor-pointer" onClick={() => navigate(`/estudantes/${e.id}`)}>
                   <TableCell className="font-mono text-muted-foreground">{e.id}</TableCell>
                   <TableCell className="font-medium">{e.nome}</TableCell>
                   <TableCell>{e.curso_nome}</TableCell>
-                  {canEdit && (
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => { setEditing(e); setModalOpen(true); }}><Pencil className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(e)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                      </div>
-                    </TableCell>
-                  )}
+                  <TableCell className="text-right" onClick={(ev) => ev.stopPropagation()}>
+                    <div className="flex justify-end gap-1">
+                      {canEdit && <Button variant="ghost" size="icon" onClick={() => { setEditing(e); setModalOpen(true); }}><Pencil className="h-4 w-4" /></Button>}
+                      {canEdit && <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(e)}><Trash2 className="h-4 w-4 text-destructive" /></Button>}
+                      <Button variant="ghost" size="icon" onClick={() => navigate(`/estudantes/${e.id}`)}><ChevronRight className="h-4 w-4" /></Button>
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

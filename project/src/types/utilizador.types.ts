@@ -14,10 +14,16 @@ export interface UtilizadorUpsert {
   nome: string;
   email: string;
   senha?: string;
+  senha_actual?: string;
   tipo: UtilizadorTipo;
 }
 
 export interface ResetPassword {
   id: number;
   nova_senha: string;
+}
+
+export interface PerfilSenha {
+  senha: string;
+  senha_actual: string;
 }

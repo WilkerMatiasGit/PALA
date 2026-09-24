@@ -218,7 +218,10 @@ async function validarAgendamentos(labId, ags, excludeActId) {
 // Valida os pedidos de materiais: devem pertencer ao laboratório e respeitar o stock disponível (RF17)
 async function validarMateriais(labId, mats) {
   for (const r of mats) {
-    const m = await prisma.material.findUnique({ where: { id: Number(r.material_id) } });
+    const m = await prisma.material.findUnique({
+      where: { id: Number(r.material_id) },
+      include: { unidade: true },
+    });
     if (!m || !m.activo) throw HTTP(404, 'Material não encontrado');
     if (m.laboratorio_id !== Number(labId)) {
       throw HTTP(400, `O material '${m.nome}' não pertence ao laboratório selecionado`);
@@ -226,7 +229,7 @@ async function validarMateriais(labId, mats) {
     const qtd = Number(r.quantidade_estimada) || 0;
     if (qtd < 1) throw HTTP(400, `A quantidade estimada do material '${m.nome}' deve ser maior que zero`);
     if (qtd > m.quantidade) {
-      throw HTTP(400, `Stock insuficiente para '${m.nome}' (disponível: ${m.quantidade} ${m.unidade})`);
+      throw HTTP(400, `Stock insuficiente para '${m.nome}' (disponível: ${m.quantidade} ${m.unidade?.nome ?? ''})`);
     }
   }
 }

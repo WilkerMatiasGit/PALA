@@ -12,6 +12,7 @@ import { FiltersBar, type FilterField } from '@/components/ui/filters-bar';
 import { SimplePagination } from '@/components/ui/simple-pagination';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { UtilizadorUpsertModal } from '@/components/modal/UtilizadorUpsertModal';
+import { ResetPasswordModal } from '@/components/modal/ResetPasswordModal';
 import { utilizadoresService } from '@/services/utilizadores.service';
 import { UTILIZADOR_TIPO_LABELS, UTILIZADOR_TIPO_OPTIONS } from '@/services/enums';
 import type { UtilizadorGet } from '@/types/utilizador.types';
@@ -27,6 +28,7 @@ export default function UtilizadoresList() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<UtilizadorGet | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UtilizadorGet | null>(null);
+  const [resetTarget, setResetTarget] = useState<UtilizadorGet | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -55,15 +57,6 @@ export default function UtilizadoresList() {
 
   const handleEdit = (u: UtilizadorGet) => { setEditing(u); setModalOpen(true); };
   const handleNew = () => { setEditing(null); setModalOpen(true); };
-  const handleResetPwd = (u: UtilizadorGet) => {
-    const nova = window.prompt(`Repor a palavra-passe de "${u.nome}". Introduza a nova palavra-passe:`, '');
-    if (nova === null) return; // cancelado
-    utilizadoresService.resetPassword({ id: u.id, nova_senha: nova || '12345678' }).then(() => {
-      toast.success(`Palavra-passe de ${u.nome} reposta`);
-    }).catch(() => {
-      toast.error('Erro ao repor a palavra-passe');
-    });
-  };
   const handleDelete = () => {
     if (!deleteTarget) return;
     utilizadoresService.remove(deleteTarget.id).then(() => {
@@ -107,7 +100,7 @@ export default function UtilizadoresList() {
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
                       <Button variant="ghost" size="icon" onClick={() => handleEdit(u)} title="Editar"><Pencil className="h-4 w-4" /></Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleResetPwd(u)} title="Repor senha"><KeyRound className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" onClick={() => setResetTarget(u)} title="Repor senha"><KeyRound className="h-4 w-4" /></Button>
                       <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(u)} title="Remover"><Trash2 className="h-4 w-4 text-destructive" /></Button>
                     </div>
                   </TableCell>
@@ -121,6 +114,13 @@ export default function UtilizadoresList() {
       <SimplePagination page={page} totalPages={totalPages} onPageChange={setPage} />
 
       <UtilizadorUpsertModal open={modalOpen} onOpenChange={setModalOpen} utilizador={editing} onSaved={load} />
+
+      <ResetPasswordModal
+        open={!!resetTarget}
+        onOpenChange={(v) => !v && setResetTarget(null)}
+        utilizador={resetTarget}
+        onSaved={load}
+      />
 
       <ConfirmDialog
         open={!!deleteTarget} onOpenChange={(v) => !v && setDeleteTarget(null)}

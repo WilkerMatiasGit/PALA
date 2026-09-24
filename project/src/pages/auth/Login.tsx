@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,12 +27,12 @@ export default function Login() {
   };
 
   const quickLogins: { label: string; email: string }[] = [
-    { label: 'Admin', email: 'cpereira@isptec.pt' },
-    { label: 'Professor', email: 'jsilva@isptec.pt' },
-    { label: 'Técnico', email: 'amartins@isptec.pt' },
-    { label: 'Coord. DLab', email: 'msantos@isptec.pt' },
-    { label: 'Supervisor', email: 'rfernandes@isptec.pt' },
-    { label: 'Chefe Dept.', email: 'scosta@isptec.pt' },
+    { label: 'Admin', email: 'cpereira@isptec.co.ao' },
+    { label: 'Professor', email: 'jsilva@isptec.co.ao' },
+    { label: 'Técnico', email: 'amartins@isptec.co.ao' },
+    { label: 'Coord. DLab', email: 'msantos@isptec.co.ao' },
+    { label: 'Supervisor', email: 'rfernandes@isptec.co.ao' },
+    { label: 'Chefe Dept.', email: 'scosta@isptec.co.ao' },
   ];
 
   const quickLogin = async (accEmail: string) => {
@@ -56,7 +55,7 @@ export default function Login() {
           <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             id="email" type="email" required
-            className="pl-9" placeholder="nome@isptec.pt"
+            className="pl-9" placeholder="nome@isptec.co.ao"
             value={email} onChange={(e) => setEmail(e.target.value)}
           />
         </div>

@@ -6,8 +6,6 @@ export type UtilizadorTipo =
   | 'supervisor'
   | 'chefe_departamento';
 
-export type LaboratorioTipo = 'quimica' | 'fisica' | 'outro';
-
 export type DepartamentoTipo = 'DET' | 'DCSA' | 'GEO' | 'outro';
 
 export type ActividadeTipo = 'aula' | 'visita' | 'projecto' | 'estagio';
@@ -28,12 +26,6 @@ export type AgendamentoEstado =
 export type AprovacaoEtapa = 'dlab' | 'supervisor';
 
 export type AprovacaoDecisao = 'aprovado' | 'rejeitado';
-
-export type MaterialCategoria =
-  | 'equipamento'
-  | 'composto'
-  | 'vidraria'
-  | 'consumivel';
 
 export type MaterialEstado =
   | 'disponivel'
@@ -68,12 +60,6 @@ export const UTILIZADOR_TIPO_SHORT: Record<UtilizadorTipo, string> = {
   coordenador_dlab: 'CDLab',
   supervisor: 'Sup.',
   chefe_departamento: 'CDpto',
-};
-
-export const LABORATORIO_TIPO_LABELS: Record<LaboratorioTipo, string> = {
-  quimica: 'Química',
-  fisica: 'Física',
-  outro: 'Outro',
 };
 
 export const DEPARTAMENTO_LABELS: Record<DepartamentoTipo, string> = {
@@ -115,13 +101,6 @@ export const APROVACAO_DECISAO_LABELS: Record<AprovacaoDecisao, string> = {
   rejeitado: 'Rejeitado',
 };
 
-export const MATERIAL_CATEGORIA_LABELS: Record<MaterialCategoria, string> = {
-  equipamento: 'Equipamento',
-  composto: 'Composto',
-  vidraria: 'Vidraria',
-  consumivel: 'Consumível',
-};
-
 export const MATERIAL_ESTADO_LABELS: Record<MaterialEstado, string> = {
   disponivel: 'Disponível',
   em_uso: 'Em Uso',
@@ -155,20 +134,12 @@ export const UTILIZADOR_TIPO_OPTIONS = Object.entries(
   UTILIZADOR_TIPO_LABELS
 ).map(([value, label]) => ({ value, label }));
 
-export const LABORATORIO_TIPO_OPTIONS = Object.entries(
-  LABORATORIO_TIPO_LABELS
-).map(([value, label]) => ({ value, label }));
-
 export const DEPARTAMENTO_OPTIONS = Object.entries(DEPARTAMENTO_LABELS).map(
   ([value, label]) => ({ value, label })
 );
 
 export const ACTIVIDADE_TIPO_OPTIONS = Object.entries(
   ACTIVIDADE_TIPO_LABELS
-).map(([value, label]) => ({ value, label }));
-
-export const MATERIAL_CATEGORIA_OPTIONS = Object.entries(
-  MATERIAL_CATEGORIA_LABELS
 ).map(([value, label]) => ({ value, label }));
 
 export const MATERIAL_ESTADO_OPTIONS = Object.entries(

@@ -13,14 +13,14 @@ import { useAuth } from '@/context/AuthContext';
 import { utilizadoresService } from '@/services/utilizadores.service';
 import { UTILIZADOR_TIPO_LABELS } from '@/services/enums';
 import type { UtilizadorGet } from '@/types/utilizador.types';
-import { User, Lock, AlertTriangle } from 'lucide-react';
+import { Lock, AlertTriangle } from 'lucide-react';
 
 export default function Perfil() {
   const { user } = useAuth();
   const [utilizador, setUtilizador] = useState<UtilizadorGet | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [nome, setNome] = useState('');
+  const [senhaActual, setSenhaActual] = useState('');
   const [novaSenha, setNovaSenha] = useState('');
   const [confirmarSenha, setConfirmarSenha] = useState('');
   const [error, setError] = useState('');
@@ -28,15 +28,22 @@ export default function Perfil() {
 
   useEffect(() => {
     if (!user) return;
-    utilizadoresService.get(user.id).then((u) => {
-      setUtilizador(u);
-      setNome(u.nome);
-    }).finally(() => setLoading(false));
+    utilizadoresService.getMe()
+    .then(setUtilizador)
+    .finally(() => setLoading(false));
   }, [user]);
 
   const handleSave = () => {
-    if (novaSenha && novaSenha !== confirmarSenha) {
+    if (!novaSenha) {
+      setError('Indique a nova senha para alterar.');
+      return;
+    }
+    if (novaSenha !== confirmarSenha) {
       setError('As senhas não coincidem.');
+      return;
+    }
+    if (!senhaActual) {
+      setError('Indique a senha actual para poder alterar.');
       return;
     }
     setError('');
@@ -47,20 +54,16 @@ export default function Perfil() {
     if (!utilizador) return;
     setSaving(true);
     try {
-      await utilizadoresService.update(utilizador.id, {
-        nome,
-        email: utilizador.email,
-        tipo: utilizador.tipo,
-        ...(novaSenha ? { senha: novaSenha } : {}),
+      await utilizadoresService.changePassword(utilizador.id, {
+        senha: novaSenha,
+        senha_actual: senhaActual,
       });
-      if (novaSenha) {
-        await utilizadoresService.resetPassword({ id: utilizador.id, nova_senha: novaSenha });
-      }
-      toast.success('Perfil atualizado com sucesso');
+      toast.success('Senha atualizada com sucesso');
+      setSenhaActual('');
       setNovaSenha('');
       setConfirmarSenha('');
-    } catch {
-      toast.error('Erro ao atualizar perfil');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao atualizar senha');
     } finally {
       setSaving(false);
       setShowConfirm(false);
@@ -90,11 +93,8 @@ export default function Perfil() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="nome">Nome</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input className="pl-9" value={nome} onChange={(e) => setNome(e.target.value)} />
-              </div>
+              <Label>Nome</Label>
+              <Input value={utilizador?.nome ?? ''} disabled className="bg-muted" />
             </div>
 
             <div className="space-y-2">
@@ -112,6 +112,10 @@ export default function Perfil() {
                 <Lock className="h-4 w-4" /> Alterar Senha
               </h3>
               <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="senha-actual">Senha actual</Label>
+                  <Input id="senha-actual" type="password" value={senhaActual} onChange={(e) => setSenhaActual(e.target.value)} placeholder="••••••••" />
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="nova-senha">Nova senha</Label>
                   <Input id="nova-senha" type="password" value={novaSenha} onChange={(e) => setNovaSenha(e.target.value)} placeholder="••••••••" />
@@ -131,7 +135,7 @@ export default function Perfil() {
             )}
 
             <div className="flex justify-end">
-              <Button onClick={handleSave} disabled={saving}>
+              <Button onClick={handleSave} disabled={saving || !novaSenha}>
                 {saving ? <Spinner className="mr-2" /> : null}
                 Guardar
               </Button>

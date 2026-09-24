@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -11,12 +10,12 @@ import { ErrorState } from '@/components/ui/error-state';
 import { laboratoriosService } from '@/services/laboratorios.service';
 import { materiaisService } from '@/services/materiais.service';
 import { agendamentosService } from '@/services/agendamentos.service';
-import { LABORATORIO_TIPO_LABELS } from '@/services/enums';
+import { catalogoLabel } from '@/utils/catalogo';
 import { formatDate, formatTime } from '@/utils/formatDate';
 import type { LaboratorioGet } from '@/types/laboratorio.types';
 import type { MaterialGet } from '@/types/material.types';
 import type { AgendamentoGet } from '@/types/agendamento.types';
-import { Package, CalendarClock, FlaskConical } from 'lucide-react';
+import { Package, CalendarClock } from 'lucide-react';
 
 export default function LaboratorioDetalhe() {
   const { id } = useParams<{ id: string }>();
@@ -52,7 +51,7 @@ export default function LaboratorioDetalhe() {
       <PageHeader
         title={lab.nome}
         breadcrumbs={[{ label: 'Laboratórios', href: '/labs' }, { label: lab.nome }]}
-        action={<Badge variant="secondary">{LABORATORIO_TIPO_LABELS[lab.tipo]}</Badge>}
+        action={<Badge variant="secondary">{catalogoLabel(lab.tipo)}</Badge>}
       />
 
       <Card className="mb-6">

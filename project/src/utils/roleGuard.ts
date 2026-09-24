@@ -110,6 +110,7 @@ export const SIDEBAR_SECTIONS: {
       { label: 'Disciplinas', path: '/disciplinas', icon: 'BookOpen', roles: ALL_ROLES },
       { label: 'Estudantes', path: '/estudantes', icon: 'Users', roles: ALL_ROLES },
       { label: 'Utilizadores', path: '/users', icon: 'UserCog', roles: ['admin'] },
+      { label: 'Configuração', path: '/configuracao', icon: 'Settings', roles: ['admin'] },
     ],
   },
 ];

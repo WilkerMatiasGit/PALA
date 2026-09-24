@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
@@ -10,7 +11,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { actividadesService } from '@/services/actividades.service';
 import { laboratoriosService } from '@/services/laboratorios.service';
 import { utilizadoresService } from '@/services/utilizadores.service';
@@ -210,8 +210,6 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
     return null;
   };
 
-  const validateStep = (s: number): boolean => getStepError(s) === null;
-
   // Erro específico de um bloco de agendamento para validação em tempo real
   const blocoError = (a: AgendamentoBloc): string | null => {
     if (!a.data) return null; // ainda não escolheu o dia
@@ -322,7 +320,7 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="num-part">Nº participantes</Label>
-                <Input id="num-part" type="number" min={1} value={numParticipantes} onChange={(e) => setNumParticipantes(e.target.value)} />
+                <NumberInput id="num-part" value={numParticipantes} onValueChange={setNumParticipantes} />
               </div>
               <div className="flex items-center gap-3 pt-6">
                 <Switch checked={precisaAssistente} onCheckedChange={setPrecisaAssistente} />
@@ -381,7 +379,7 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="num-turma">Nº da turma</Label>
-                    <Input id="num-turma" type="number" min={1} value={numeroTurma} onChange={(e) => setNumeroTurma(e.target.value)} placeholder="Ex: 1" />
+                    <NumberInput id="num-turma" value={numeroTurma} onValueChange={setNumeroTurma} placeholder="Ex: 1" />
                   </div>
                 </div>
                 {turmaPreview && (
@@ -523,8 +521,8 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
                     </div>
                     <div className="w-24 space-y-1">
                       <Label className="text-xs">Qtd. estimada</Label>
-                      <Input type="number" min={1} value={mr.quantidade_estimada} onChange={(e) => {
-                        const copy = [...materialReqs]; copy[i].quantidade_estimada = Number(e.target.value); setMaterialReqs(copy);
+                      <NumberInput value={String(mr.quantidade_estimada ?? '')} onValueChange={(v) => {
+                        const copy = [...materialReqs]; copy[i].quantidade_estimada = v === '' ? 0 : Number(v); setMaterialReqs(copy);
                       }} />
                     </div>
                     <Button variant="ghost" size="icon" onClick={() => setMaterialReqs(materialReqs.filter((_, idx) => idx !== i))}>

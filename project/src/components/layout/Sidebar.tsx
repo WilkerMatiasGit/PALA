@@ -1,7 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, ClipboardList, CheckCircle, Calendar, Package,
-  History, BarChart3, FlaskConical, GraduationCap, BookOpen, Users, UserCog,
+  History, BarChart3, FlaskConical, GraduationCap, BookOpen, Users, UserCog, Settings,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -13,7 +13,7 @@ import { FlaskConical as Logo } from 'lucide-react';
 
 const ICONS: Record<string, LucideIcon> = {
   LayoutDashboard, ClipboardList, CheckCircle, Calendar, Package,
-  History, BarChart3, FlaskConical, GraduationCap, BookOpen, Users, UserCog,
+  History, BarChart3, FlaskConical, GraduationCap, BookOpen, Users, UserCog, Settings,
 };
 
 // Item ativo só se a rota coincide exatamente OU é uma página de detalhe (:id numérico).

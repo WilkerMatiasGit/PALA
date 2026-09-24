@@ -1,7 +1,7 @@
 import { api, apiErrorMessage } from './api';
 import type { CursoGet, CursoUpsert } from '@/types/curso.types';
 import type { DisciplinaGet, DisciplinaUpsert, CursoDisciplinaGet, CursoDisciplinaUpsert } from '@/types/disciplina.types';
-import type { EstudanteGet, EstudanteUpsert } from '@/types/estudantes.types';
+import type { EstudanteGet, EstudanteUpsert, EstudanteActividadeGet } from '@/types/estudantes.types';
 
 export const cursosService = {
   // ---- Cursos ----
@@ -105,6 +105,10 @@ export const cursosService = {
     } catch (err) {
       throw new Error(apiErrorMessage(err));
     }
+  },
+  async listEstudanteActividades(id: number): Promise<EstudanteActividadeGet[]> {
+    const { data } = await api.get<EstudanteActividadeGet[]>(`/estudantes/${id}/actividades`);
+    return data;
   },
   async createEstudante(data: EstudanteUpsert): Promise<EstudanteGet> {
     try {

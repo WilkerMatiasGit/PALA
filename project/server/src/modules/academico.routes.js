@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../db.js';
 import { authRequired, rbac } from '../middleware/auth.js';
-import { toDisciplinaGet, toCursoDisciplinaGet, toEstudanteGet } from '../utils/dto.js';
+import { toDisciplinaGet, toCursoDisciplinaGet, toEstudanteGet, toEstagioActividadeGet } from '../utils/dto.js';
 
 // ---- Disciplinas ----
 const disciplinas = Router();
@@ -145,6 +145,21 @@ estudantes.get('/:id', async (req, res, next) => {
     });
     if (!e) return res.status(404).json({ message: 'Estudante não encontrado' });
     res.json(toEstudanteGet(e));
+  } catch (err) {
+    next(err);
+  }
+});
+
+estudantes.get('/:id/actividades', async (req, res, next) => {
+  try {
+    const estagios = await prisma.estagio.findMany({
+      where: { estudante_id: Number(req.params.id), activo: true },
+      include: {
+        actividade: { include: { laboratorio: true, responsavel: true, criado_por: true } },
+      },
+      orderBy: { criado_em: 'desc' },
+    });
+    res.json(estagios.map(toEstagioActividadeGet));
   } catch (err) {
     next(err);
   }

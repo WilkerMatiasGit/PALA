@@ -1,8 +1,16 @@
 import { api, apiErrorMessage } from './api';
 import type { AgendamentoGet, AgendamentoUpsert } from '@/types/agendamento.types';
 
+export interface AgendamentoListFilters {
+  laboratorio_id?: number;
+  mes?: number;
+  ano?: number;
+  de?: string;
+  ate?: string;
+}
+
 export const agendamentosService = {
-  async list(filters?: { laboratorio_id?: number; mes?: number; ano?: number }): Promise<AgendamentoGet[]> {
+  async list(filters?: AgendamentoListFilters): Promise<AgendamentoGet[]> {
     const { data } = await api.get<AgendamentoGet[]>('/agendamentos', { params: filters });
     return data;
   },

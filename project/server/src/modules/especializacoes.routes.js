@@ -243,7 +243,10 @@ atividadeMateriais.post('/', async (req, res, next) => {
     }
     const actv = await prisma.actividade.findUnique({ where: { id: Number(actividade_id) } });
     if (!actv || !actv.activo) return res.status(404).json({ message: 'Atividade não encontrada' });
-    const mat = await prisma.material.findUnique({ where: { id: Number(material_id) } });
+    const mat = await prisma.material.findUnique({
+      where: { id: Number(material_id) },
+      include: { unidade: true },
+    });
     if (!mat || !mat.activo) return res.status(404).json({ message: 'Material não encontrado' });
     if (mat.laboratorio_id !== actv.laboratorio_id) {
       return res.status(400).json({ message: `O material '${mat.nome}' não pertence ao laboratório da atividade` });
@@ -251,7 +254,7 @@ atividadeMateriais.post('/', async (req, res, next) => {
     const qtd = Number(quantidade_estimada) || 0;
     if (qtd < 1) return res.status(400).json({ message: 'quantidade_estimada deve ser maior que zero' });
     if (qtd > mat.quantidade) {
-      return res.status(400).json({ message: `Stock insuficiente para '${mat.nome}' (disponível: ${mat.quantidade} ${mat.unidade})` });
+      return res.status(400).json({ message: `Stock insuficiente para '${mat.nome}' (disponível: ${mat.quantidade} ${mat.unidade?.nome ?? ''})` });
     }
     const result = await prisma.actividadeMaterial.upsert({
       where: { actividade_id_material_id: { actividade_id: Number(actividade_id), material_id: Number(material_id) } },

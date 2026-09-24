@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card } from '@/components/ui/card';
@@ -7,9 +7,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
+import { FiltersBar, type FilterField } from '@/components/ui/filters-bar';
+import { SimplePagination } from '@/components/ui/simple-pagination';
 import { aprovacoesService } from '@/services/aprovacoes.service';
 import { useAuth } from '@/context/AuthContext';
 import { formatDate } from '@/utils/formatDate';
+import { PAGE_SIZE } from '@/utils/constants';
 import type { AprovacaoGet } from '@/types/aprovacao.types';
 import { CheckCircle, ChevronRight } from 'lucide-react';
 
@@ -19,13 +22,33 @@ export default function AprovacoesList() {
   const [data, setData] = useState<AprovacaoGet[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [page, setPage] = useState(1);
 
   const load = () => {
     setLoading(true); setError(false);
-    aprovacoesService.listFila(user?.tipo ?? '').then(setData).catch(() => setError(true)).finally(() => setLoading(false));
+    aprovacoesService.listFila().then(setData).catch(() => setError(true)).finally(() => setLoading(false));
   };
 
   useEffect(() => { load(); }, [user?.tipo]);
+
+  const filtered = useMemo(() => {
+    let result = [...data];
+    if (filters.actividade) {
+      const q = filters.actividade.toLowerCase();
+      result = result.filter((a) => (a.actividade_nome ?? '').toLowerCase().includes(q));
+    }
+    if (filters.etapa) result = result.filter((a) => a.etapa === filters.etapa);
+    return result;
+  }, [data, filters]);
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const pageData = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const filterFields: FilterField[] = [
+    { key: 'actividade', label: 'Actividade', type: 'text', placeholder: 'Pesquisar...' },
+    { key: 'etapa', label: 'Etapa', type: 'select', options: [{ value: 'dlab', label: 'DLab' }, { value: 'supervisor', label: 'Supervisor' }] },
+  ];
 
   const isAdmin = user?.tipo === 'admin';
   const title = isAdmin
@@ -43,12 +66,14 @@ export default function AprovacoesList() {
     <div>
       <PageHeader title={title} description={description} />
 
+      <FiltersBar fields={filterFields} values={filters} onChange={(k, v) => { setFilters({ ...filters, [k]: v }); setPage(1); }} onReset={() => { setFilters({}); setPage(1); }} />
+
       <Card className="p-0">
         {error ? (
           <div className="p-4"><ErrorState onRetry={load} /></div>
         ) : loading ? (
           <div className="p-4"><TableSkeleton rows={4} cols={4} /></div>
-        ) : data.length === 0 ? (
+        ) : pageData.length === 0 ? (
           <EmptyState icon={CheckCircle} title="Nada para aprovar" description="Não existem actividades na sua fila de aprovação neste momento." />
         ) : (
           <Table>
@@ -61,7 +86,7 @@ export default function AprovacoesList() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.map((a) => (
+              {pageData.map((a) => (
                 <TableRow key={a.id} className="cursor-pointer" onClick={() => navigate(`/aprovacoes/${a.id}`)}>
                   <TableCell className="font-medium">{a.actividade_nome}</TableCell>
                   <TableCell><Badge variant="secondary">{a.etapa === 'dlab' ? 'DLab' : 'Supervisor'}</Badge></TableCell>
@@ -73,6 +98,8 @@ export default function AprovacoesList() {
           </Table>
         )}
       </Card>
+
+      <SimplePagination page={page} totalPages={totalPages} onPageChange={setPage} />
     </div>
   );
 }

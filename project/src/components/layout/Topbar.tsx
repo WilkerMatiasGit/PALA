@@ -1,4 +1,3 @@
-import { useNavigate } from 'react-router-dom';
 import { Bell, LogOut } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useNotificacoes } from '@/context/NotificacoesContext';
@@ -9,12 +8,10 @@ import {
   DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { UTILIZADOR_TIPO_LABELS } from '@/services/enums';
-import { formatDate } from '@/utils/formatDate';
 
 export function Topbar() {
   const { user, logout } = useAuth();
   const { notificacoes, alertasCount } = useNotificacoes();
-  const navigate = useNavigate();
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Bom dia' : hour < 19 ? 'Boa tarde' : 'Boa noite';

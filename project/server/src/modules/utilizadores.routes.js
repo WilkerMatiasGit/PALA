@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../db.js';
-import { hashSenha } from '../utils/hash.js';
+import { hashSenha, verifySenha } from '../utils/hash.js';
 import { authRequired, rbac } from '../middleware/auth.js';
 import { toUserGet } from '../utils/dto.js';
 
@@ -17,6 +17,17 @@ router.get('/', rbac('admin'), async (req, res, next) => {
   try {
     const users = await prisma.utilizador.findMany({ where: { activo: true }, orderBy: { id: 'asc' } });
     res.json(users.map(toUserGet));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /user/me — obter o próprio utilizador (qualquer role autenticado)  [definir ANTES de /:id]
+router.get('/me', async (req, res, next) => {
+  try {
+    const u = await prisma.utilizador.findFirst({ where: { id: req.user.id, activo: true } });
+    if (!u) return res.status(404).json({ message: 'Utilizador não encontrado' });
+    res.json(toUserGet(u));
   } catch (err) {
     next(err);
   }
@@ -89,7 +100,7 @@ router.put('/:id', async (req, res, next) => {
     const targetId = Number(req.params.id);
     const u = await prisma.utilizador.findUnique({ where: { id: targetId } });
     if (!u) return res.status(404).json({ message: 'Utilizador não encontrado' });
-    const { nome, email, tipo, senha } = req.body || {};
+    const { nome, email, tipo, senha, senha_actual } = req.body || {};
     const isAdmin = req.user.tipo === 'admin';
     if (!isAdmin && req.user.id !== targetId) {
       return res.status(403).json({ message: 'Não pode editar este utilizador' });
@@ -101,7 +112,17 @@ router.put('/:id', async (req, res, next) => {
     }
     if (!isAdmin) {
       // não-admin: só nome/senha; ignora email/tipo vindos no payload
-      if (senha !== undefined && senha !== '') data.senha_hash = await hashSenha(senha);
+      if (senha !== undefined && senha !== '') {
+        // Exige senha actual para confirmar a alteração (RF do perfil).
+        if (!u.senha_hash) {
+          if (senha_actual !== '12345678') {
+            return res.status(400).json({ message: 'Senha actual incorrecta' });
+          }
+        } else if (!(await verifySenha(u.senha_hash, senha_actual || ''))) {
+          return res.status(400).json({ message: 'Senha actual incorrecta' });
+        }
+        data.senha_hash = await hashSenha(senha);
+      }
     } else {
       if (email !== undefined) data.email = email;
       if (tipo !== undefined) data.tipo = tipo;

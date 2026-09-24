@@ -1,5 +1,5 @@
 import { api, apiErrorMessage } from './api';
-import type { UtilizadorGet, UtilizadorUpsert, ResetPassword } from '@/types/utilizador.types';
+import type { UtilizadorGet, UtilizadorUpsert, ResetPassword, PerfilSenha } from '@/types/utilizador.types';
 
 export const utilizadoresService = {
   async list(): Promise<UtilizadorGet[]> {
@@ -9,6 +9,11 @@ export const utilizadoresService = {
 
   async listTecnicos(): Promise<UtilizadorGet[]> {
     const { data } = await api.get<UtilizadorGet[]>('/user/tecnicos');
+    return data;
+  },
+
+  async getMe(): Promise<UtilizadorGet> {
+    const { data } = await api.get<UtilizadorGet>('/user/me');
     return data;
   },
 
@@ -31,6 +36,16 @@ export const utilizadoresService = {
   },
 
   async update(id: number, data: UtilizadorUpsert): Promise<UtilizadorGet> {
+    try {
+      const { data: updated } = await api.put<UtilizadorGet>(`/user/${id}`, data);
+      return updated;
+    } catch (err) {
+      throw new Error(apiErrorMessage(err));
+    }
+  },
+
+  // PUT /user/:id — alteração da própria senha (exige senha_actual)
+  async changePassword(id: number, data: PerfilSenha): Promise<UtilizadorGet> {
     try {
       const { data: updated } = await api.put<UtilizadorGet>(`/user/${id}`, data);
       return updated;

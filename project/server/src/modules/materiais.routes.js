@@ -3,13 +3,14 @@ import { prisma } from '../db.js';
 import { authRequired, rbac } from '../middleware/auth.js';
 import { stockActual, recomputeMaterial } from '../utils/stock.js';
 import { toMaterialGet, toHistoricoGet } from '../utils/dto.js';
+import { categoriaMaterialId, unidadeId } from '../utils/catalogos.js';
 
 const router = Router();
 router.use(authRequired);
 
 const MAT_ROLES = ['admin', 'tecnico', 'coordenador_dlab', 'supervisor', 'chefe_departamento']; // professor SEM acesso a materiais
 
-const materialInclude = { laboratorio: true };
+const materialInclude = { laboratorio: true, categoria: true, unidade: true };
 const historicoInclude = { material: true, utilizador: true, actividade: true };
 
 // GET /materiais — listar (filtros laboratorio_id, categoria, estado)  [A,T,C,S,CD]
@@ -17,7 +18,11 @@ router.get('/', rbac(...MAT_ROLES), async (req, res, next) => {
   try {
     const where = { activo: true };
     if (req.query.laboratorio_id) where.laboratorio_id = Number(req.query.laboratorio_id);
-    if (req.query.categoria) where.categoria = req.query.categoria;
+    if (req.query.categoria) {
+      const categoria_id = await categoriaMaterialId(req.query.categoria);
+      if (!categoria_id) return res.json([]);
+      where.categoria_id = categoria_id;
+    }
     if (req.query.estado) where.estado = req.query.estado;
     const rows = await prisma.material.findMany({ where, include: materialInclude, orderBy: { id: 'asc' } });
     res.json(rows.map(toMaterialGet));
@@ -104,6 +109,11 @@ router.post('/', rbac('admin', 'tecnico', 'coordenador_dlab', 'supervisor', 'che
     }
     const lab = await prisma.laboratorio.findUnique({ where: { id: Number(laboratorio_id) } });
     if (!lab) return res.status(404).json({ message: 'Laboratório não encontrado' });
+    const categoria_id = await categoriaMaterialId(categoria);
+    if (!categoria_id) {
+      return res.status(400).json({ message: `Categoria desconhecida: ${categoria}` });
+    }
+    const unidade_id = await unidadeId(unidade);
     const dup = await prisma.material.findFirst({
       where: { activo: true, laboratorio_id: Number(laboratorio_id), nome: String(nome).trim() },
     });
@@ -114,10 +124,10 @@ router.post('/', rbac('admin', 'tecnico', 'coordenador_dlab', 'supervisor', 'che
       data: {
         laboratorio_id: Number(laboratorio_id),
         nome,
-        categoria,
+        categoria_id,
         quantidade: 0,
         quantidade_minima: Number(quantidade_minima),
-        unidade,
+        unidade_id,
         estado: estado || 'disponivel',
       },
       include: materialInclude,
@@ -155,9 +165,15 @@ router.put('/:id', rbac('admin', 'tecnico', 'coordenador_dlab', 'supervisor', 'c
     }
     const data = {};
     if (nome !== undefined) data.nome = nome;
-    if (categoria !== undefined) data.categoria = categoria;
+    if (categoria !== undefined) {
+      const categoria_id = await categoriaMaterialId(categoria);
+      if (!categoria_id) {
+        return res.status(400).json({ message: `Categoria desconhecida: ${categoria}` });
+      }
+      data.categoria_id = categoria_id;
+    }
     if (quantidade_minima !== undefined) data.quantidade_minima = Number(quantidade_minima);
-    if (unidade !== undefined) data.unidade = unidade;
+    if (unidade !== undefined) data.unidade_id = await unidadeId(unidade);
     if (estado !== undefined) data.estado = estado;
     const atualizado = await prisma.material.update({ where: { id: m.id }, data, include: materialInclude });
     res.json(toMaterialGet(atualizado));

@@ -16,8 +16,10 @@ const UtilizadoresList = lazy(() => import('@/pages/utilizadores/UtilizadoresLis
 const LaboratoriosList = lazy(() => import('@/pages/laboratorios/LaboratoriosList'));
 const LaboratorioDetalhe = lazy(() => import('@/pages/laboratorios/LaboratorioDetalhe'));
 const CursosList = lazy(() => import('@/pages/cursos/CursosList'));
+const CursoDetalhe = lazy(() => import('@/pages/cursos/CursoDetalhe'));
 const DisciplinasList = lazy(() => import('@/pages/cursos/DisciplinasList'));
 const EstudantesList = lazy(() => import('@/pages/estudantes/EstudantesList'));
+const EstudanteDetalhe = lazy(() => import('@/pages/estudantes/EstudanteDetalhe'));
 const ActividadesList = lazy(() => import('@/pages/actividades/ActividadesList'));
 const ActividadeDetalhe = lazy(() => import('@/pages/actividades/ActividadeDetalhe'));
 const AprovacoesList = lazy(() => import('@/pages/aprovacoes/AprovacoesList'));
@@ -28,6 +30,7 @@ const MateriaisHistoricoList = lazy(() => import('@/pages/materiais/MateriaisHis
 const MaterialDetalhe = lazy(() => import('@/pages/materiais/MaterialDetalhe'));
 const RelatoriosList = lazy(() => import('@/pages/relatorios/RelatoriosList'));
 const RelatorioDetalhe = lazy(() => import('@/pages/relatorios/RelatorioDetalhe'));
+const Configuracao = lazy(() => import('@/pages/configuracao/Configuracao'));
 
 function AppRoutes() {
   const { user } = useAuth();
@@ -47,8 +50,10 @@ function AppRoutes() {
       <Route path="/labs" element={<ProtectedRoute><AppShell><Suspense fallback={<FullPageSpinner />}><LaboratoriosList /></Suspense></AppShell></ProtectedRoute>} />
       <Route path="/labs/:id" element={<ProtectedRoute allowedRoles={['admin','tecnico','coordenador_dlab','supervisor','chefe_departamento']}><AppShell><Suspense fallback={<FullPageSpinner />}><LaboratorioDetalhe /></Suspense></AppShell></ProtectedRoute>} />
       <Route path="/cursos" element={<ProtectedRoute><AppShell><Suspense fallback={<FullPageSpinner />}><CursosList /></Suspense></AppShell></ProtectedRoute>} />
+      <Route path="/cursos/:id" element={<ProtectedRoute><AppShell><Suspense fallback={<FullPageSpinner />}><CursoDetalhe /></Suspense></AppShell></ProtectedRoute>} />
       <Route path="/disciplinas" element={<ProtectedRoute><AppShell><Suspense fallback={<FullPageSpinner />}><DisciplinasList /></Suspense></AppShell></ProtectedRoute>} />
       <Route path="/estudantes" element={<ProtectedRoute><AppShell><Suspense fallback={<FullPageSpinner />}><EstudantesList /></Suspense></AppShell></ProtectedRoute>} />
+      <Route path="/estudantes/:id" element={<ProtectedRoute><AppShell><Suspense fallback={<FullPageSpinner />}><EstudanteDetalhe /></Suspense></AppShell></ProtectedRoute>} />
       <Route path="/actividades" element={<ProtectedRoute><AppShell><Suspense fallback={<FullPageSpinner />}><ActividadesList /></Suspense></AppShell></ProtectedRoute>} />
       <Route path="/actividades/:id" element={<ProtectedRoute><AppShell><Suspense fallback={<FullPageSpinner />}><ActividadeDetalhe /></Suspense></AppShell></ProtectedRoute>} />
       <Route path="/aprovacoes" element={<ProtectedRoute allowedRoles={['admin','coordenador_dlab','supervisor','chefe_departamento']}><AppShell><Suspense fallback={<FullPageSpinner />}><AprovacoesList /></Suspense></AppShell></ProtectedRoute>} />
@@ -59,6 +64,7 @@ function AppRoutes() {
       <Route path="/materiais/:id" element={<ProtectedRoute allowedRoles={['admin','tecnico','coordenador_dlab','supervisor','chefe_departamento']}><AppShell><Suspense fallback={<FullPageSpinner />}><MaterialDetalhe /></Suspense></AppShell></ProtectedRoute>} />
       <Route path="/relatorios" element={<ProtectedRoute><AppShell><Suspense fallback={<FullPageSpinner />}><RelatoriosList /></Suspense></AppShell></ProtectedRoute>} />
       <Route path="/relatorios/:id" element={<ProtectedRoute><AppShell><Suspense fallback={<FullPageSpinner />}><RelatorioDetalhe /></Suspense></AppShell></ProtectedRoute>} />
+      <Route path="/configuracao" element={<ProtectedRoute allowedRoles={['admin']}><AppShell><Suspense fallback={<FullPageSpinner />}><Configuracao /></Suspense></AppShell></ProtectedRoute>} />
 
       <Route path="*" element={<Navigate to={user ? "/inicio" : "/"} replace />} />
     </Routes>

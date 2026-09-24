@@ -12,11 +12,12 @@ export function toUserGet(u) {
   };
 }
 
+// Recebe Laboratorio com include { unidadeLaboratorial } — tipo = chave do catálogo
 export function toLabGet(l) {
   return {
     id: l.id,
     nome: l.nome,
-    tipo: l.tipo,
+    tipo: l.unidadeLaboratorial?.nome ?? 'outro',
     descricao: l.descricao ?? '',
     criado_em: l.criado_em,
     actualizado_em: l.actualizado_em,
@@ -70,17 +71,17 @@ export function toEstudanteGet(e) {
   };
 }
 
-// Recebe Material com include { laboratorio }
+// Recebe Material com include { laboratorio, categoria, unidade }
 export function toMaterialGet(m) {
   return {
     id: m.id,
     laboratorio_id: m.laboratorio_id,
     laboratorio_nome: m.laboratorio?.nome ?? '',
     nome: m.nome,
-    categoria: m.categoria,
+    categoria: m.categoria?.nome ?? '',
     quantidade: m.quantidade,
     quantidade_minima: m.quantidade_minima,
-    unidade: m.unidade,
+    unidade: m.unidade?.nome ?? 'un',
     estado: m.estado,
     criado_em: m.criado_em,
     actualizado_em: m.actualizado_em,
@@ -244,10 +245,33 @@ export function toActividadeMaterialGet(am) {
   };
 }
 
-// Recebe Aprovacao com include { aprovador, agendamento: { atividade }, atividade }
+// Recebe Estagio com include { actividade: { laboratorio, responsavel } }
+// — usado em GET /estudantes/:id/actividades (vínculos de actividades de um estudante).
+export function toEstagioActividadeGet(est) {
+  const a = est.actividade;
+  return {
+    estagio_id: est.id,
+    ...(a ? {
+      actividade_id: a.id,
+      nome: a.nome,
+      tipo: a.tipo,
+      estado: a.estado,
+      laboratorio_id: a.laboratorio_id,
+      laboratorio_nome: a.laboratorio?.nome ?? '',
+      responsavel_id: a.responsavel_id,
+      responsavel_nome: a.responsavel?.nome ?? '',
+      criado_em: a.criado_em,
+      actualizado_em: a.actualizado_em,
+    } : {}),
+    data_inicio: est.data_inicio,
+    data_fim: est.data_fim,
+  };
+}
+
+// Recebe Aprovacao com include { aprovador, agendamento: { atividade }, atividade, aprovacaoAgendamentos }
 export function toAprovacaoGet(ap) {
   const g = ap.agendamento;
-  return {
+  const out = {
     id: ap.id,
     ...(ap.agendamento_id != null ? { agendamento_id: ap.agendamento_id } : {}),
     ...(ap.actividade_id != null ? { actividade_id: ap.actividade_id } : g?.actividade_id != null ? { actividade_id: g.actividade_id } : {}),
@@ -261,6 +285,18 @@ export function toAprovacaoGet(ap) {
     criado_em: ap.criado_em,
     actualizado_em: ap.actualizado_em,
   };
+  if (Array.isArray(ap.aprovacaoAgendamentos) && ap.aprovacaoAgendamentos.length > 0) {
+    out.agendamentos = ap.aprovacaoAgendamentos
+      .filter((aa) => aa.activo)
+      .map((aa) => ({
+        agendamento_id: aa.agendamento_id,
+        agendamento_nome: aa.agendamento?.actividade?.nome ?? '',
+        h_inicio: aa.agendamento?.hora_inicio,
+        h_fim: aa.agendamento?.hora_fim,
+        decisao: aa.decisao,
+      }));
+  }
+  return out;
 }
 
 // Recebe Relatorio com include { laboratorio, criadoPor }

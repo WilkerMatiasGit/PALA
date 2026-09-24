@@ -13,6 +13,9 @@ dist-ssr
 *.local
 .env
 
+# Vercel — ligação local (contém orgId/projectId)
+.vercel
+
 # Backend DLab — dados persistidos (gerados do seed no 1º arranque)
 server/data/
 server/data/*.json

@@ -4,8 +4,11 @@
 //  - Sem --force: aborta se já existirem utilizadores.
 // O stock dos materiais é sempre recalculado a partir do histórico (RF17).
 // As senhas ficam vazias; o login atribui o hash de "12345678" no primeiro acesso.
+// No fim, sincroniza as sequences com os MAX(id) — os IDs do seed são explícitos e,
+// sem setval, o Postgres/Neon reusa ids no próximo INSERT (Unique constraint failed).
 
 import { prisma } from '../src/db.js';
+import { syncSequences } from './sync-sequences.js';
 
 const force = process.argv.includes('--force');
 const D = (s) => new Date(s);
@@ -19,6 +22,7 @@ async function run() {
 
   // ---- Limpeza (ordem inversa das FKs) ----
   console.log('[seed] a limpar base...');
+  await prisma.aprovacaoAgendamento.deleteMany();
   await prisma.aprovacao.deleteMany();
   await prisma.historicoMaterial.deleteMany();
   await prisma.actividadeMaterial.deleteMany();
@@ -37,18 +41,45 @@ async function run() {
   await prisma.curso.deleteMany();
   await prisma.laboratorio.deleteMany();
   await prisma.utilizador.deleteMany();
+  await prisma.unidadeLaboratorial.deleteMany();
+  await prisma.categoriaMaterial.deleteMany();
+  await prisma.unidade.deleteMany();
+
+  // ---- Catálogos (PLANO.md §2.1) ----
+  console.log('[seed] catalogos...');
+  await prisma.unidadeLaboratorial.createMany({
+    data: [
+      { id: 1, nome: 'quimica', descricao: 'Laboratório de Química' },
+      { id: 2, nome: 'fisica', descricao: 'Laboratório de Física' },
+      { id: 3, nome: 'outro', descricao: 'Laboratório multiuso' },
+    ],
+  });
+  await prisma.categoriaMaterial.createMany({
+    data: [
+      { id: 1, nome: 'equipamento' },
+      { id: 2, nome: 'composto' },
+      { id: 3, nome: 'vidraria' },
+      { id: 4, nome: 'consumivel' },
+    ],
+  });
+  const unidadesExistentes = ['ml', 'un', 'g'];
+  for (const [idx, nome] of unidadesExistentes.entries()) {
+    await prisma.unidade.create({ data: { id: idx + 1, nome } });
+  }
+  // mapa nome -> id
+  const UNIDADE_ID = Object.fromEntries(unidadesExistentes.map((n, i) => [n, i + 1]));
 
   // ---- Utilizadores ----
   console.log('[seed] utilizadores...');
   await prisma.utilizador.createMany({
     data: [
-      { id: 1, nome: 'João Silva', email: 'jsilva@isptec.pt', tipo: 'professor', criado_em: D('2025-01-10T10:00:00Z') },
-      { id: 2, nome: 'Ana Martins', email: 'amartins@isptec.pt', tipo: 'tecnico', criado_em: D('2025-01-12T10:00:00Z') },
-      { id: 3, nome: 'Carlos Pereira', email: 'cpereira@isptec.pt', tipo: 'admin', criado_em: D('2025-01-05T10:00:00Z') },
-      { id: 4, nome: 'Maria Santos', email: 'msantos@isptec.pt', tipo: 'coordenador_dlab', criado_em: D('2025-01-08T10:00:00Z') },
-      { id: 5, nome: 'Rui Fernandes', email: 'rfernandes@isptec.pt', tipo: 'supervisor', criado_em: D('2025-01-06T10:00:00Z') },
-      { id: 6, nome: 'Sofia Costa', email: 'scosta@isptec.pt', tipo: 'chefe_departamento', criado_em: D('2025-01-07T10:00:00Z') },
-      { id: 7, nome: 'Pedro Almeida', email: 'palmeida@isptec.pt', tipo: 'professor', criado_em: D('2025-02-01T10:00:00Z') },
+      { id: 1, nome: 'João Silva', email: 'jsilva@isptec.co.ao', tipo: 'professor', criado_em: D('2025-01-10T10:00:00Z') },
+      { id: 2, nome: 'Ana Martins', email: 'amartins@isptec.co.ao', tipo: 'tecnico', criado_em: D('2025-01-12T10:00:00Z') },
+      { id: 3, nome: 'Carlos Pereira', email: 'cpereira@isptec.co.ao', tipo: 'admin', criado_em: D('2025-01-05T10:00:00Z') },
+      { id: 4, nome: 'Maria Santos', email: 'msantos@isptec.co.ao', tipo: 'coordenador_dlab', criado_em: D('2025-01-08T10:00:00Z') },
+      { id: 5, nome: 'Rui Fernandes', email: 'rfernandes@isptec.co.ao', tipo: 'supervisor', criado_em: D('2025-01-06T10:00:00Z') },
+      { id: 6, nome: 'Sofia Costa', email: 'scosta@isptec.co.ao', tipo: 'chefe_departamento', criado_em: D('2025-01-07T10:00:00Z') },
+      { id: 7, nome: 'Pedro Almeida', email: 'palmeida@isptec.co.ao', tipo: 'professor', criado_em: D('2025-02-01T10:00:00Z') },
     ],
   });
 
@@ -56,10 +87,10 @@ async function run() {
   console.log('[seed] laboratorios...');
   await prisma.laboratorio.createMany({
     data: [
-      { id: 1, nome: 'Lab. Química 1', tipo: 'quimica', descricao: 'Laboratório de Química Geral e Orgânica', criado_em: D('2025-01-01T10:00:00Z') },
-      { id: 2, nome: 'Lab. Física', tipo: 'fisica', descricao: 'Laboratório de Física Aplicada e Mecânica', criado_em: D('2025-01-01T10:00:00Z') },
-      { id: 3, nome: 'Lab. Química 2', tipo: 'quimica', descricao: 'Laboratório de Química Analítica', criado_em: D('2025-01-01T10:00:00Z') },
-      { id: 4, nome: 'Lab. Multidisciplinar', tipo: 'outro', descricao: 'Laboratório multiuso para projetos e estágios', criado_em: D('2025-01-01T10:00:00Z') },
+      { id: 1, nome: 'Lab. Química 1', unidade_laboratorial_id: 1, descricao: 'Laboratório de Química Geral e Orgânica', criado_em: D('2025-01-01T10:00:00Z') },
+      { id: 2, nome: 'Lab. Física', unidade_laboratorial_id: 2, descricao: 'Laboratório de Física Aplicada e Mecânica', criado_em: D('2025-01-01T10:00:00Z') },
+      { id: 3, nome: 'Lab. Química 2', unidade_laboratorial_id: 1, descricao: 'Laboratório de Química Analítica', criado_em: D('2025-01-01T10:00:00Z') },
+      { id: 4, nome: 'Lab. Multidisciplinar', unidade_laboratorial_id: 3, descricao: 'Laboratório multiuso para projetos e estágios', criado_em: D('2025-01-01T10:00:00Z') },
     ],
   });
 
@@ -104,14 +135,14 @@ async function run() {
   console.log('[seed] materiais...');
   await prisma.material.createMany({
     data: [
-      { id: 1, laboratorio_id: 1, nome: 'Ácido Clorídrico (HCl)', categoria: 'composto', quantidade: 0, quantidade_minima: 5, unidade: 'ml', estado: 'disponivel', criado_em: D('2025-01-01T10:00:00Z') },
-      { id: 2, laboratorio_id: 1, nome: 'Béquer 250ml', categoria: 'vidraria', quantidade: 0, quantidade_minima: 10, unidade: 'un', estado: 'disponivel', criado_em: D('2025-01-01T10:00:00Z') },
-      { id: 3, laboratorio_id: 1, nome: 'Pipeta Graduada', categoria: 'vidraria', quantidade: 0, quantidade_minima: 12, unidade: 'un', estado: 'disponivel', criado_em: D('2025-01-01T10:00:00Z') },
-      { id: 4, laboratorio_id: 2, nome: 'Multímetro Digital', categoria: 'equipamento', quantidade: 0, quantidade_minima: 5, unidade: 'un', estado: 'disponivel', criado_em: D('2025-01-01T10:00:00Z') },
-      { id: 5, laboratorio_id: 2, nome: 'Pendulo Simples', categoria: 'equipamento', quantidade: 0, quantidade_minima: 4, unidade: 'un', estado: 'manutencao', criado_em: D('2025-01-01T10:00:00Z') },
-      { id: 6, laboratorio_id: 3, nome: 'Sulfato de Cobre', categoria: 'composto', quantidade: 0, quantidade_minima: 3, unidade: 'g', estado: 'esgotado', criado_em: D('2025-01-01T10:00:00Z') },
-      { id: 7, laboratorio_id: 3, nome: 'Proveta 100ml', categoria: 'vidraria', quantidade: 0, quantidade_minima: 8, unidade: 'un', estado: 'disponivel', criado_em: D('2025-01-01T10:00:00Z') },
-      { id: 8, laboratorio_id: 1, nome: 'Luvas Nitrilo', categoria: 'consumivel', quantidade: 0, quantidade_minima: 50, unidade: 'un', estado: 'disponivel', criado_em: D('2025-01-01T10:00:00Z') },
+      { id: 1, laboratorio_id: 1, nome: 'Ácido Clorídrico (HCl)', categoria_id: 2, quantidade: 0, quantidade_minima: 5, unidade_id: UNIDADE_ID.ml, estado: 'disponivel', criado_em: D('2025-01-01T10:00:00Z') },
+      { id: 2, laboratorio_id: 1, nome: 'Béquer 250ml', categoria_id: 3, quantidade: 0, quantidade_minima: 10, unidade_id: UNIDADE_ID.un, estado: 'disponivel', criado_em: D('2025-01-01T10:00:00Z') },
+      { id: 3, laboratorio_id: 1, nome: 'Pipeta Graduada', categoria_id: 3, quantidade: 0, quantidade_minima: 12, unidade_id: UNIDADE_ID.un, estado: 'disponivel', criado_em: D('2025-01-01T10:00:00Z') },
+      { id: 4, laboratorio_id: 2, nome: 'Multímetro Digital', categoria_id: 1, quantidade: 0, quantidade_minima: 5, unidade_id: UNIDADE_ID.un, estado: 'disponivel', criado_em: D('2025-01-01T10:00:00Z') },
+      { id: 5, laboratorio_id: 2, nome: 'Pendulo Simples', categoria_id: 1, quantidade: 0, quantidade_minima: 4, unidade_id: UNIDADE_ID.un, estado: 'manutencao', criado_em: D('2025-01-01T10:00:00Z') },
+      { id: 6, laboratorio_id: 3, nome: 'Sulfato de Cobre', categoria_id: 2, quantidade: 0, quantidade_minima: 3, unidade_id: UNIDADE_ID.g, estado: 'esgotado', criado_em: D('2025-01-01T10:00:00Z') },
+      { id: 7, laboratorio_id: 3, nome: 'Proveta 100ml', categoria_id: 3, quantidade: 0, quantidade_minima: 8, unidade_id: UNIDADE_ID.un, estado: 'disponivel', criado_em: D('2025-01-01T10:00:00Z') },
+      { id: 8, laboratorio_id: 1, nome: 'Luvas Nitrilo', categoria_id: 4, quantidade: 0, quantidade_minima: 50, unidade_id: UNIDADE_ID.un, estado: 'disponivel', criado_em: D('2025-01-01T10:00:00Z') },
     ],
   });
 
@@ -234,6 +265,11 @@ async function run() {
       data: { quantidade: agg._sum.quantidade_movimentada ?? 0 },
     });
   }
+
+  // ---- Sequences: alinhar auto-increment com os IDs explícitos do seed ----
+  console.log('[seed] sincronizar sequences...');
+  const tabelas = await syncSequences(prisma);
+  console.log(`[seed] sequences OK (${tabelas.length}): ${tabelas.join(', ')}`);
 
   await prisma.$disconnect();
   console.log('\n[seed] concluído. + 7 utilizadores · 6 actividades · 9 agendamentos · 10 aprovações · 8 materiais');
