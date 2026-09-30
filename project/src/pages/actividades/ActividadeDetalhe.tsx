@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -13,24 +13,14 @@ import { ErrorState } from '@/components/ui/error-state';
 import { actividadesService } from '@/services/actividades.service';
 import { agendamentosService } from '@/services/agendamentos.service';
 import { aprovacoesService } from '@/services/aprovacoes.service';
-import { formatEstado, formatTipo, formatDecisao, formatPapel, formatAgendamentoEstado } from '@/utils/formatEstado';
+import { apiErrorMessage } from '@/services/api';
+import { formatEstado, formatTipo, formatDecisao, formatAgendamentoEstado } from '@/utils/formatEstado';
 import { formatDate, formatDateTime } from '@/utils/formatDate';
 import { useAuth } from '@/context/AuthContext';
-import type { ActividadeGet, AulaGet, VisitaGet, ProjectoGet, EstagioGet, ActividadeTecnicoGet, ActividadeMaterialGet } from '@/types/actividade.types';
+import type { ActividadeGet, AulaGet, VisitaGet, ProjectoGet, EstagioGet, ActividadeMaterialGet } from '@/types/actividade.types';
 import type { AgendamentoGet } from '@/types/agendamento.types';
-import type { AprovacaoGet, AprovacaoAgendamentoItem } from '@/types/aprovacao.types';
-import type { AprovacaoDecisao, AprovacaoEtapa } from '@/services/enums';
-import { CheckCircle2, Circle, FileText, Upload, User, Wrench, Package, Clock } from 'lucide-react';
-
-interface GrupoHistorico {
-  key: string;
-  aprovador_nome: string;
-  etapa: AprovacaoEtapa;
-  decisao: AprovacaoDecisao;
-  comentario: string;
-  decidido_em: string;
-  itens: AprovacaoAgendamentoItem[];
-}
+import type { DecisaoGet } from '@/types/aprovacao.types';
+import { CheckCircle2, Circle, FileText, Upload, UserCheck, Package, Clock, Users } from 'lucide-react';
 
 export default function ActividadeDetalhe() {
   const { id } = useParams<{ id: string }>();
@@ -41,12 +31,12 @@ export default function ActividadeDetalhe() {
   const [visita, setVisita] = useState<VisitaGet | null>(null);
   const [projecto, setProjecto] = useState<ProjectoGet | null>(null);
   const [estagio, setEstagio] = useState<EstagioGet | null>(null);
-  const [tecnicos, setTecnicos] = useState<ActividadeTecnicoGet[]>([]);
   const [materiais, setMateriais] = useState<ActividadeMaterialGet[]>([]);
   const [agendamentos, setAgendamentos] = useState<AgendamentoGet[]>([]);
-  const [aprovacoes, setAprovacoes] = useState<AprovacaoGet[]>([]);
+  const [decisoes, setDecisoes] = useState<DecisaoGet[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [confirmingId, setConfirmingId] = useState<number | null>(null);
 
   const handleOpenDocumento = (path?: string) => {
     if (!path) return;
@@ -57,74 +47,79 @@ export default function ActividadeDetalhe() {
     }
   };
 
-  const load = () => {
+  const pendenteRef = useRef<number | null>(null);
+  const load = (force = false) => {
     if (!id) return;
     const aid = Number(id);
+    if (force) pendenteRef.current = null;
+    if (pendenteRef.current === aid) return;
+    pendenteRef.current = aid;
     setLoading(true);
+    setError(false);
     Promise.all([
       actividadesService.get(aid),
       actividadesService.getAula(aid),
       actividadesService.getVisita(aid),
       actividadesService.getProjecto(aid),
       actividadesService.getEstagio(aid),
-      actividadesService.listTecnicos(aid),
       actividadesService.listMateriais(aid),
       agendamentosService.listByActividade(aid),
-      aprovacoesService.listByActividade(aid),
-    ]).then(([a, au, v, p, e, t, m, ag, ap]) => {
+      aprovacoesService.listDecisoes(aid),
+    ]).then(([a, au, v, p, e, m, ag, dec]) => {
+      if (pendenteRef.current !== aid) return;
       setActividade(a); setAula(au); setVisita(v); setProjecto(p); setEstagio(e);
-      setTecnicos(t); setMateriais(m); setAgendamentos(ag); setAprovacoes(ap);
-    }).catch(() => setError(true)).finally(() => setLoading(false));
+      setMateriais(m); setAgendamentos(ag); setDecisoes(dec);
+    }).catch(() => { if (pendenteRef.current === aid) setError(true); })
+      .finally(() => { if (pendenteRef.current === aid) { pendenteRef.current = null; setLoading(false); } });
   };
 
   useEffect(() => { load(); }, [id]);
 
-  const grupos = useMemo<GrupoHistorico[]>(() => {
-    const map = new Map<string, GrupoHistorico>();
-    for (const ap of aprovacoes) {
-      const itensLote = ap.agendamentos && ap.agendamentos.length > 0;
-      const chave = itensLote
-        ? `lote-${ap.id}`
-        : `${ap.etapa}|${ap.decisao}|${ap.comentario}|${ap.aprovador_nome}|${ap.decidido_em}`;
-      const base = {
-        aprovador_nome: ap.aprovador_nome,
-        etapa: ap.etapa,
-        decisao: ap.decisao,
-        comentario: ap.comentario ?? '',
-        decidido_em: ap.decidido_em,
-      };
-      const alvo = map.get(chave);
-      if (alvo) {
-        alvo.itens.push({ agendamento_id: ap.agendamento_id, decisao: ap.decisao });
-      } else {
-        map.set(chave, {
-          ...base,
-          key: chave,
-          itens: ap.agendamentos && ap.agendamentos.length > 0
-            ? [...ap.agendamentos]
-            : [{ agendamento_id: ap.agendamento_id, decisao: ap.decisao }],
-        });
-      }
-    }
-    return [...map.values()];
-  }, [aprovacoes]);
-
   if (loading) return <FullPageSpinner />;
-  if (error || !actividade) return <ErrorState onRetry={load} />;
+  if (error || !actividade) return <ErrorState onRetry={() => load(true)} />;
 
   const est = formatEstado(actividade.estado);
   const tipo = formatTipo(actividade.tipo);
 
   const ehResponsavel = user?.tipo === 'professor' && user.id === actividade.responsavel_id;
-  const ehValidador = user?.tipo === 'tecnico' && tecnicos.some((t) => t.utilizador_id === user?.id && t.papel === 'validador');
+  const ehValidador = (ag: AgendamentoGet) =>
+    user?.tipo === 'tecnico' && ag.validador_id === user?.id;
   const canConfirm = user?.tipo === 'admin' || ehResponsavel;
-  const canConfirmTec = user?.tipo === 'admin' || ehValidador;
+  const canConfirmTec = (ag: AgendamentoGet) => user?.tipo === 'admin' || ehValidador(ag);
 
-  const handleConfirmProf = (agId: number) => {
-    agendamentosService.confirmarProfessor(agId).then(() => { toast.success('Presença confirmada pelo professor'); load(); });
+  const confirmarErro = (err: unknown) => {
+    if ((err as { response?: { status?: number } })?.response?.status === 429) {
+      toast.error('Muitos pedidos, aguarda um momento e tenta novamente');
+    } else {
+      toast.error(apiErrorMessage(err));
+    }
   };
-  const handleConfirmTec = (agId: number) => {
-    agendamentosService.confirmarTecnico(agId).then(() => { toast.success('Presença confirmada pelo técnico'); load(); });
+
+  const handleConfirmProf = async (agId: number) => {
+    if (confirmingId != null) return;
+    setConfirmingId(agId);
+    try {
+      await agendamentosService.confirmarProfessor(agId);
+      toast.success('Presença confirmada pelo professor');
+      load();
+    } catch (err) {
+      confirmarErro(err);
+    } finally {
+      setConfirmingId(null);
+    }
+  };
+  const handleConfirmTec = async (agId: number) => {
+    if (confirmingId != null) return;
+    setConfirmingId(agId);
+    try {
+      await agendamentosService.confirmarTecnico(agId);
+      toast.success('Presença confirmada pelo técnico');
+      load();
+    } catch (err) {
+      confirmarErro(err);
+    } finally {
+      setConfirmingId(null);
+    }
   };
 
   return (
@@ -160,8 +155,7 @@ export default function ActividadeDetalhe() {
               <div className="flex justify-between"><span className="text-muted-foreground">Laboratório</span><span className="font-medium">{actividade.laboratorio_nome}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Criado por</span><span className="font-medium">{actividade.criado_por_nome}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Responsável</span><span className="font-medium">{actividade.responsavel_nome}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Participantes</span><span className="font-medium">{actividade.num_participantes}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Precisa assistente</span><span className="font-medium">{actividade.precisa_assistente ? 'Sim' : 'Não'}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Agendamentos</span><span className="font-medium">{agendamentos.length}</span></div>
               {actividade.observacoes && <Separator />}
               {actividade.observacoes && <div><span className="text-muted-foreground">Observações: </span>{actividade.observacoes}</div>}
             </CardContent>
@@ -204,26 +198,6 @@ export default function ActividadeDetalhe() {
               )}
             </CardContent>
           </Card>
-
-          {/* Técnico & Assistente */}
-          <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Wrench className="h-4 w-4" /> Técnico & Assistente</CardTitle></CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              {tecnicos.length === 0 ? (
-                <EmptyState icon={User} title="Sem técnicos atribuídos" description="A atribuição ocorre na aprovação do Supervisor." />
-              ) : (
-                tecnicos.map((t) => {
-                  const p = formatPapel(t.papel);
-                  return (
-                    <div key={t.id} className="flex justify-between">
-                      <span className="text-muted-foreground">{p.label}</span>
-                      <Badge variant="outline" className={p.className}>{t.utilizador_nome}</Badge>
-                    </div>
-                  );
-                })
-              )}
-            </CardContent>
-          </Card>
         </TabsContent>
 
         <TabsContent value="agendamentos">
@@ -238,35 +212,45 @@ export default function ActividadeDetalhe() {
                     const agEst = formatAgendamentoEstado(ag.estado);
                     const aprovado = ag.estado === 'aprovado_supervisor';
                     return (
-                      <div key={ag.id} className="flex items-center justify-between rounded-lg border p-3">
-                        <div>
-                          <p className="text-sm font-medium">{formatDate(ag.hora_inicio)}</p>
-                          <p className="text-xs text-muted-foreground">{formatDateTime(ag.hora_inicio).split(' às ')[1]} - {formatDateTime(ag.hora_fim).split(' às ')[1]}</p>
+                      <div key={ag.id} className="rounded-lg border p-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium">{formatDate(ag.hora_inicio)}</p>
+                            <p className="text-xs text-muted-foreground">{formatDateTime(ag.hora_inicio).split(' às ')[1]} - {formatDateTime(ag.hora_fim).split(' às ')[1]}</p>
+                            <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"><Users className="h-3 w-3" /> {ag.num_participantes} participante(s)</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {ag.realizado ? (
+                              <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200"><CheckCircle2 className="mr-1 h-3 w-3" /> Realizado</Badge>
+                            ) : aprovado ? (
+                              <>
+                                {ag.confirmado_professor_em ? (
+                                  <Badge className="bg-blue-100 text-blue-800 border-blue-200"><CheckCircle2 className="mr-1 h-3 w-3" /> Prof ✓</Badge>
+                                ) : canConfirm ? (
+                                  <Button size="sm" variant="outline" disabled={confirmingId === ag.id} onClick={() => handleConfirmProf(ag.id)}>Prof. confirmar</Button>
+                                ) : (
+                                  <Badge variant="outline"><Circle className="mr-1 h-3 w-3" /> Prof ☐</Badge>
+                                )}
+                                {ag.confirmado_tecnico_em ? (
+                                  <Badge className="bg-blue-100 text-blue-800 border-blue-200"><CheckCircle2 className="mr-1 h-3 w-3" /> Técn ✓</Badge>
+                                ) : canConfirmTec(ag) ? (
+                                  <Button size="sm" variant="outline" disabled={confirmingId === ag.id} onClick={() => handleConfirmTec(ag.id)}>Téc. confirmar</Button>
+                                ) : (
+                                  <Badge variant="outline"><Circle className="mr-1 h-3 w-3" /> Técn ☐</Badge>
+                                )}
+                              </>
+                            ) : (
+                              <Badge variant="outline" className={agEst.className}>{agEst.label}</Badge>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {ag.realizado ? (
-                            <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200"><CheckCircle2 className="mr-1 h-3 w-3" /> Realizado</Badge>
-                          ) : aprovado ? (
-                            <>
-                              {ag.confirmado_professor_em ? (
-                                <Badge className="bg-blue-100 text-blue-800 border-blue-200"><CheckCircle2 className="mr-1 h-3 w-3" /> Prof ✓</Badge>
-                              ) : canConfirm ? (
-                                <Button size="sm" variant="outline" onClick={() => handleConfirmProf(ag.id)}>Prof. confirmar</Button>
-                              ) : (
-                                <Badge variant="outline"><Circle className="mr-1 h-3 w-3" /> Prof ☐</Badge>
-                              )}
-                              {ag.confirmado_tecnico_em ? (
-                                <Badge className="bg-blue-100 text-blue-800 border-blue-200"><CheckCircle2 className="mr-1 h-3 w-3" /> Técn ✓</Badge>
-                              ) : canConfirmTec ? (
-                                <Button size="sm" variant="outline" onClick={() => handleConfirmTec(ag.id)}>Téc. confirmar</Button>
-                              ) : (
-                                <Badge variant="outline"><Circle className="mr-1 h-3 w-3" /> Técn ☐</Badge>
-                              )}
-                            </>
-                          ) : (
-                            <Badge variant="outline" className={agEst.className}>{agEst.label}</Badge>
-                          )}
-                        </div>
+                        {aprovado && (ag.validador_nome || ag.assistente_nome) && (
+                          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                            <UserCheck className="h-3 w-3" />
+                            {ag.validador_nome && <span><span className="font-medium">Validador:</span> {ag.validador_nome}</span>}
+                            {ag.assistente_nome && <span><span className="font-medium">Assistente:</span> {ag.assistente_nome}</span>}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -313,38 +297,28 @@ export default function ActividadeDetalhe() {
 
         <TabsContent value="historico">
           <Card className="p-0">
-            {grupos.length === 0 ? (
-              <div className="p-4"><EmptyState icon={Circle} title="Sem aprovações registadas" /></div>
+            {decisoes.length === 0 ? (
+              <div className="p-4"><EmptyState icon={Circle} title="Sem decisões registadas" /></div>
             ) : (
               <div className="divide-y">
-                {grupos.map((g) => {
+                {decisoes.map((g) => {
                   const d = formatDecisao(g.decisao);
+                  const horario = g.h_inicio
+                    ? `${formatDate(g.h_inicio)} · ${formatDateTime(g.h_inicio).split(' às ')[1]} - ${formatDateTime(g.h_fim ?? g.h_inicio).split(' às ')[1]}`
+                    : `Agendamento #${g.agendamento_id}`;
                   return (
-                    <div key={g.key} className="p-4 text-sm">
+                    <div key={g.id} className="p-4 text-sm">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="font-medium">{g.etapa === 'dlab' ? 'Coordenador DLab' : 'Supervisor'}</span>
+                        <span className="font-medium">
+                          {g.decisor_nome} · {g.etapa === 'dlab' ? 'Coordenador DLab' : 'Supervisor'}
+                        </span>
                         <Badge variant="outline" className={d.className}>{d.label}</Badge>
                       </div>
-                      <p className="mt-1 text-xs text-muted-foreground">{g.aprovador_nome} · {formatDate(g.decidido_em)}</p>
-                      {g.comentario && <p className="mt-1 text-xs">{g.comentario}</p>}
-                      <div className="mt-2 space-y-1">
-                        {g.itens.map((item, i) => {
-                          const id = item.agendamento_id;
-                          const dec = formatDecisao(item.decisao);
-                          const horario = item.h_inicio
-                            ? `${formatDateTime(item.h_inicio).split(' às ')[1]} - ${formatDateTime(item.h_fim).split(' às ')[1]}`
-                            : (id != null ? `Agendamento #${id}` : '—');
-                          return (
-                            <div key={id ?? i} className="flex items-center justify-between rounded border px-2 py-1 text-xs">
-                              <span className="flex items-center gap-1 text-muted-foreground">
-                                <Clock className="h-3 w-3" />
-                                {horario}
-                              </span>
-                              <Badge variant="outline" className={dec.className}>{dec.label}</Badge>
-                            </div>
-                          );
-                        })}
-                      </div>
+                      <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        {horario} · {formatDateTime(g.criado_em)}
+                      </p>
+                      {g.comentario && <p className="mt-1 text-xs italic text-muted-foreground">“{g.comentario}”</p>}
                     </div>
                   );
                 })}

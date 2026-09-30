@@ -6,7 +6,6 @@ import {
   toVisitaGet,
   toProjectoGet,
   toEstagioGet,
-  toActividadeTecnicoGet,
   toActividadeMaterialGet,
 } from '../utils/dto.js';
 
@@ -188,47 +187,6 @@ estagios.put('/:id/documento', rbac(...ACT_ROLES), async (req, res, next) => {
 });
 
 export const estagiosRouter = estagios;
-
-// ---- Actividade-Técnico ----
-const atividadeTecnico = Router();
-atividadeTecnico.use(authRequired, rbac('admin', 'coordenador_dlab', 'supervisor'));
-
-// POST /actividade-tecnico — atribuir técnico (validador) ou assistente
-atividadeTecnico.post('/', async (req, res, next) => {
-  try {
-    const { actividade_id, utilizador_id, papel } = req.body || {};
-    if (!actividade_id || !utilizador_id || !papel) {
-      return res.status(400).json({ message: 'actividade_id, utilizador_id e papel são obrigatórios' });
-    }
-    const result = await prisma.actividadeTecnico.upsert({
-      where: { actividade_id_papel: { actividade_id: Number(actividade_id), papel } },
-      update: { utilizador_id: Number(utilizador_id) },
-      create: {
-        actividade_id: Number(actividade_id),
-        utilizador_id: Number(utilizador_id),
-        papel,
-      },
-      include: { utilizador: true },
-    });
-    res.status(201).json(toActividadeTecnicoGet(result));
-  } catch (err) {
-    next(err);
-  }
-});
-
-// DELETE /actividade-tecnico/:id
-atividadeTecnico.delete('/:id', async (req, res, next) => {
-  try {
-    const t = await prisma.actividadeTecnico.findUnique({ where: { id: Number(req.params.id) } });
-    if (!t) return res.status(404).json({ message: 'Atribuição não encontrada' });
-    await prisma.actividadeTecnico.update({ where: { id: t.id }, data: { activo: false } });
-    res.json({ message: 'Atribuição removida' });
-  } catch (err) {
-    next(err);
-  }
-});
-
-export const atividadeTecnicoRouter = atividadeTecnico;
 
 // ---- Actividade-Materiais ----
 const atividadeMateriais = Router();

@@ -86,6 +86,7 @@ export default function MaterialDetalhe() {
                     <TableHead>Δ</TableHead>
                     <TableHead>Motivo</TableHead>
                     <TableHead>Utilizador</TableHead>
+                    <TableHead>Origem</TableHead>
                     <TableHead>Data</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -99,6 +100,7 @@ export default function MaterialDetalhe() {
                       </TableCell>
                       <TableCell>{MOVIMENTACAO_MOTIVO_LABELS[h.motivo]}</TableCell>
                       <TableCell className="text-muted-foreground">{h.utilizador_nome}</TableCell>
+                      <TableCell className="text-muted-foreground">{h.agendamento_nome ?? '—'}</TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(h.criado_em)}</TableCell>
                     </TableRow>
                   ))}

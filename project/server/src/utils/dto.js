@@ -88,7 +88,7 @@ export function toMaterialGet(m) {
   };
 }
 
-// Recebe HistoricoMaterial com include { material, utilizador, actividade }
+// Recebe HistoricoMaterial com include { material, utilizador, agendamento: { actividade } }
 export function toHistoricoGet(h) {
   const out = {
     id: h.id,
@@ -102,9 +102,9 @@ export function toHistoricoGet(h) {
     criado_em: h.criado_em,
     actualizado_em: h.actualizado_em,
   };
-  if (h.actividade_id != null) {
-    out.actividade_id = h.actividade_id;
-    out.actividade_nome = h.actividade?.nome;
+  if (h.agendamento_id != null) {
+    out.agendamento_id = h.agendamento_id;
+    out.agendamento_nome = h.agendamento?.actividade?.nome;
   }
   return out;
 }
@@ -122,8 +122,6 @@ export function toActividadeGet(a) {
     laboratorio_nome: a.laboratorio?.nome ?? '',
     tipo: a.tipo,
     estado: a.estado,
-    num_participantes: a.num_participantes,
-    precisa_assistente: a.precisa_assistente,
     observacoes: a.observacoes ?? '',
     criado_em: a.criado_em,
     actualizado_em: a.actualizado_em,
@@ -198,32 +196,40 @@ export function toEstagioGet(e) {
   };
 }
 
-// Recebe Agendamento com include { actividad: { laboratorio, utilizador } }
+// Recebe Agendamento com include { actividad: { laboratorio, utilizador } } e,
+// opcionalmente, tecnicos: { utilizador } (atribuição por sessão).
 export function toAgendamentoGet(g) {
   const act = g.actividade;
+  const val = g.tecnicos?.find((t) => t.papel === 'validador' && t.activo);
+  const ass = g.tecnicos?.find((t) => t.papel === 'assistente' && t.activo);
   return {
     id: g.id,
     actividade_id: g.actividade_id,
     actividade_nome: act?.nome ?? '',
     laboratorio_id: act?.laboratorio_id,
     laboratorio_nome: act?.laboratorio?.nome ?? '',
+    num_participantes: g.num_participantes,
     hora_inicio: g.hora_inicio,
     hora_fim: g.hora_fim,
     confirmado_professor_em: g.confirmado_professor_em,
     confirmado_tecnico_em: g.confirmado_tecnico_em,
     realizado: g.realizado,
     estado: g.estado,
+    validador_id: val?.utilizador_id ?? null,
+    validador_nome: val?.utilizador?.nome ?? '',
+    assistente_id: ass?.utilizador_id ?? null,
+    assistente_nome: ass?.utilizador?.nome ?? '',
     criado_em: g.criado_em,
     actualizado_em: g.actualizado_em,
   };
 }
 
-// Recebe ActividadeTecnico com include { utilizador, atividade }
-export function toActividadeTecnicoGet(t) {
+// Recebe AgendamentoTecnico com include { utilizador, agendamento }
+export function toAgendamentoTecnicoGet(t) {
   return {
     id: t.id,
-    actividade_id: t.actividade_id,
-    ...(t.actividade ? { actividade_nome: t.actividade.nome } : {}),
+    agendamento_id: t.agendamento_id,
+    ...(t.agendamento ? { agendamento_nome: t.agendamento.actividade?.nome } : {}),
     utilizador_id: t.utilizador_id,
     utilizador_nome: t.utilizador?.nome ?? '',
     papel: t.papel,
@@ -268,33 +274,22 @@ export function toEstagioActividadeGet(est) {
   };
 }
 
-// Recebe Aprovacao com include { aprovador, agendamento: { atividade }, atividade, aprovacaoAgendamentos }
-export function toAprovacaoGet(ap) {
-  const g = ap.agendamento;
+// Recebe DecisaoAgendamento com include { decisor } (agendamento opcional)
+export function toDecisaoGet(d) {
   const out = {
-    id: ap.id,
-    ...(ap.agendamento_id != null ? { agendamento_id: ap.agendamento_id } : {}),
-    ...(ap.actividade_id != null ? { actividade_id: ap.actividade_id } : g?.actividade_id != null ? { actividade_id: g.actividade_id } : {}),
-    ...(ap.actividade?.nome ? { actividade_nome: ap.actividade.nome } : g?.actividade?.nome ? { actividade_nome: g.actividade.nome } : {}),
-    aprovador_id: ap.aprovador_id,
-    aprovador_nome: ap.aprovador?.nome ?? '',
-    etapa: ap.etapa,
-    decisao: ap.decisao,
-    comentario: ap.comentario ?? '',
-    decidido_em: ap.decidido_em ?? '',
-    criado_em: ap.criado_em,
-    actualizado_em: ap.actualizado_em,
+    id: d.id,
+    agendamento_id: d.agendamento_id,
+    decisor_id: d.decisor_id,
+    decisor_nome: d.decisor?.nome ?? '',
+    etapa: d.etapa,
+    decisao: d.decisao,
+    comentario: d.comentario ?? '',
+    criado_em: d.criado_em,
   };
-  if (Array.isArray(ap.aprovacaoAgendamentos) && ap.aprovacaoAgendamentos.length > 0) {
-    out.agendamentos = ap.aprovacaoAgendamentos
-      .filter((aa) => aa.activo)
-      .map((aa) => ({
-        agendamento_id: aa.agendamento_id,
-        agendamento_nome: aa.agendamento?.actividade?.nome ?? '',
-        h_inicio: aa.agendamento?.hora_inicio,
-        h_fim: aa.agendamento?.hora_fim,
-        decisao: aa.decisao,
-      }));
+  if (d.agendamento) {
+    out.agendamento_nome = d.agendamento.actividade?.nome;
+    out.h_inicio = d.agendamento.hora_inicio;
+    out.h_fim = d.agendamento.hora_fim;
   }
   return out;
 }

@@ -11,7 +11,7 @@ import cursosRouter from './modules/cursos.routes.js';
 import { disciplinasRouter, cursoDisciplinasRouter, estudantesRouter } from './modules/academico.routes.js';
 import materiaisRouter from './modules/materiais.routes.js';
 import actividadesRouter from './modules/actividades.routes.js';
-import { aulasRouter, visitasRouter, projectosRouter, estagiosRouter, atividadeTecnicoRouter, atividadeMateriaisRouter } from './modules/especializacoes.routes.js';
+import { aulasRouter, visitasRouter, projectosRouter, estagiosRouter, atividadeMateriaisRouter } from './modules/especializacoes.routes.js';
 import agendamentosRouter from './modules/agendamentos.routes.js';
 import aprovacoesFilaRouter, { historico as aprovacoesHistoricoRouter } from './modules/aprovacoes.routes.js';
 import relatoriosRouter from './modules/relatorios.routes.js';
@@ -51,10 +51,35 @@ const janela = 15 * 60 * 1000;
 const mensagem429 = { message: 'Demasiados pedidos, tente novamente mais tarde' };
 const aoExceder = (req, res) => res.status(429).json(mensagem429);
 
-// Rate-limit global da API (por instância; em serverless Vercel é por warm container)
-app.use(rateLimit({ windowMs: janela, limit: 300, standardHeaders: 'draft-7', legacyHeaders: false, handler: aoExceder }));
-// Rate-limit reforçado no login
-app.use('/user/login', rateLimit({ windowMs: janela, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false, handler: aoExceder }));
+// Rate-limit por camada (por instância; em serverless Vercel é por warm container):
+//  - escritas (POST/PUT/DELETE): 1000/15min — ações que alteram dados têm teto moderado;
+//  - leituras (GET): 5000/15min — o uso normal do front não é bloqueado (abrir o detalhe
+//    de uma atividade dispara 8 pedidos de leitura) e continua protegido contra abuso;
+//  - login: 20/15min — reforçado (ação não autenticada, alvo de força bruta).
+app.use(
+  rateLimit({
+    windowMs: janela,
+    limit: 1000,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    handler: aoExceder,
+    skip: (req) => req.method.toUpperCase() === 'GET',
+  })
+);
+app.use(
+  rateLimit({
+    windowMs: janela,
+    limit: 5000,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    handler: aoExceder,
+    skip: (req) => req.method.toUpperCase() !== 'GET',
+  })
+);
+app.use(
+  '/user/login',
+  rateLimit({ windowMs: janela, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false, handler: aoExceder })
+);
 
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
@@ -74,7 +99,6 @@ app.use('/aulas', aulasRouter);
 app.use('/visitas', visitasRouter);
 app.use('/projectos', projectosRouter);
 app.use('/estagios', estagiosRouter);
-app.use('/actividade-tecnico', atividadeTecnicoRouter);
 app.use('/actividade-materiais', atividadeMateriaisRouter);
 app.use('/agendamentos', agendamentosRouter);
 app.use('/aprovacoes', aprovacoesFilaRouter);

@@ -12,9 +12,9 @@ export type ActividadeTipo = 'aula' | 'visita' | 'projecto' | 'estagio';
 
 export type ActividadeEstado =
   | 'pendente'
-  | 'revisado_dlab'
-  | 'revisado_supervisor'
-  | 'rejeitado';
+  | 'em_andamento'
+  | 'rejeitada'
+  | 'realizada';
 
 export type AgendamentoEstado =
   | 'nao_revisto'
@@ -78,9 +78,9 @@ export const ACTIVIDADE_TIPO_LABELS: Record<ActividadeTipo, string> = {
 
 export const ACTIVIDADE_ESTADO_LABELS: Record<ActividadeEstado, string> = {
   pendente: 'Pendente',
-  revisado_dlab: 'Revisto DLab',
-  revisado_supervisor: 'Revisto',
-  rejeitado: 'Rejeitado',
+  em_andamento: 'Em andamento',
+  rejeitada: 'Rejeitada',
+  realizada: 'Realizada',
 };
 
 export const AGENDAMENTO_ESTADO_LABELS: Record<AgendamentoEstado, string> = {

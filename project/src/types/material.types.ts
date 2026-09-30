@@ -31,8 +31,8 @@ export interface HistoricoMaterialGet {
   material_nome: string;
   utilizador_id: number;
   utilizador_nome: string;
-  actividade_id?: number;
-  actividade_nome?: string;
+  agendamento_id?: number;
+  agendamento_nome?: string;
   quantidade_movimentada: number;
   motivo: MovimentacaoMotivo;
   descricao: string;
@@ -44,7 +44,7 @@ export interface HistoricoMaterialUpsert {
   id?: number;
   material_id: number;
   utilizador_id: number;
-  actividade_id?: number;
+  agendamento_id?: number;
   quantidade_movimentada: number;
   motivo: MovimentacaoMotivo;
   descricao: string;

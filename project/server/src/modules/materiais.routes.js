@@ -11,7 +11,7 @@ router.use(authRequired);
 const MAT_ROLES = ['admin', 'tecnico', 'coordenador_dlab', 'supervisor', 'chefe_departamento']; // professor SEM acesso a materiais
 
 const materialInclude = { laboratorio: true, categoria: true, unidade: true };
-const historicoInclude = { material: true, utilizador: true, actividade: true };
+const historicoInclude = { material: true, utilizador: true, agendamento: { include: { actividade: { select: { nome: true } } } } };
 
 // GET /materiais — listar (filtros laboratorio_id, categoria, estado)  [A,T,C,S,CD]
 router.get('/', rbac(...MAT_ROLES), async (req, res, next) => {
@@ -47,7 +47,7 @@ router.get('/historico', rbac(...MAT_ROLES), async (req, res, next) => {
 // POST /materiais/historico — registar movimentação (RF16/RF17)  [A,T,S,CD]
 router.post('/historico', rbac('admin', 'tecnico', 'supervisor', 'chefe_departamento'), async (req, res, next) => {
   try {
-    const { material_id, utilizador_id, actividade_id, quantidade_movimentada, motivo, descricao } = req.body || {};
+    const { material_id, utilizador_id, agendamento_id, quantidade_movimentada, motivo, descricao } = req.body || {};
     if (!material_id || quantidade_movimentada == null || !motivo || !descricao) {
       return res.status(400).json({ message: 'material_id, quantidade_movimentada, motivo e descricao são obrigatórios' });
     }
@@ -58,7 +58,7 @@ router.post('/historico', rbac('admin', 'tecnico', 'supervisor', 'chefe_departam
       data: {
         material_id: Number(material_id),
         utilizador_id: Number(utilizador_id),
-        ...(actividade_id ? { actividade_id: Number(actividade_id) } : {}),
+        ...(agendamento_id ? { agendamento_id: Number(agendamento_id) } : {}),
         quantidade_movimentada: Number(quantidade_movimentada),
         motivo,
         descricao,

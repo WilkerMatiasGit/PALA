@@ -11,8 +11,6 @@ import type {
   ProjectoUpsert,
   EstagioGet,
   EstagioUpsert,
-  ActividadeTecnicoGet,
-  ActividadeTecnicoUpsert,
   ActividadeMaterialGet,
   ActividadeMaterialUpsert,
 } from '@/types/actividade.types';
@@ -147,27 +145,6 @@ export const actividadesService = {
     try {
       const { data } = await api.put<EstagioGet>(`/estagios/${id}/documento`, { anexo_path: anexoPath });
       return data;
-    } catch (err) {
-      throw new Error(apiErrorMessage(err));
-    }
-  },
-
-  // ---- Técnicos (validador + assistente) ----
-  async listTecnicos(actividadeId: number): Promise<ActividadeTecnicoGet[]> {
-    const { data } = await api.get<ActividadeTecnicoGet[]>(`/actividades/${actividadeId}/tecnicos`);
-    return data;
-  },
-  async addTecnico(data: ActividadeTecnicoUpsert): Promise<ActividadeTecnicoGet> {
-    try {
-      const { data: result } = await api.post<ActividadeTecnicoGet>('/actividade-tecnico', data);
-      return result;
-    } catch (err) {
-      throw new Error(apiErrorMessage(err));
-    }
-  },
-  async removeTecnico(id: number): Promise<void> {
-    try {
-      await api.delete(`/actividade-tecnico/${id}`);
     } catch (err) {
       throw new Error(apiErrorMessage(err));
     }

@@ -1,5 +1,5 @@
 import { api, apiErrorMessage } from './api';
-import type { AgendamentoGet, AgendamentoUpsert } from '@/types/agendamento.types';
+import type { AgendamentoGet, AgendamentoTecnicosPayload, AgendamentoUpsert } from '@/types/agendamento.types';
 
 export interface AgendamentoListFilters {
   laboratorio_id?: number;
@@ -50,6 +50,17 @@ export const agendamentosService = {
   async confirmarTecnico(id: number): Promise<AgendamentoGet> {
     try {
       const { data } = await api.put<AgendamentoGet>(`/agendamentos/${id}/confirmar-tecnico`);
+      return data;
+    } catch (err) {
+      throw new Error(apiErrorMessage(err));
+    }
+  },
+
+  // POST /agendamentos/:id/tecnicos — atribuição manual (Admin/Supervisor) para
+  // sessões aprovadas sem técnicos (ex.: dados antigos).
+  async atribuirTecnicos(id: number, payload: AgendamentoTecnicosPayload): Promise<AgendamentoGet> {
+    try {
+      const { data } = await api.post<AgendamentoGet>(`/agendamentos/${id}/tecnicos`, payload);
       return data;
     } catch (err) {
       throw new Error(apiErrorMessage(err));

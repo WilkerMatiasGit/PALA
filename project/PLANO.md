@@ -7,14 +7,34 @@
 
 ## 0. DECISÕES DE ARQUITECTURA TOMADAS (consenso)
 
-1. **Estado da atividade**: mantêm-se `revisado_dlab`/`revisado_supervisor` (marcadores de etapa). O AGENTS.md já foi actualizado; não renomear para `aprovado_*`.
-2. **Modelo de aprovação**: permanece **por agendamento** (votos individuais + conclusão de etapa). O AGENTS.md documenta este modelo como o actual.
-3. **Pendentes não bloqueiam avanço**: agendamentos deixados `pendente` ficam incompletos **apenas na etapa actual**; os já decididos avançam. Admite-se **duas etapas activas** na mesma atividade.
+> **Modelo de agendamentos independentes — IMPLEMENTADO** (ver §0.1). As decisões 1, 2, 3 e 7
+> abaixo foram **substituídas** pelo modelo descrito em §0.1 e mantêm-se aqui apenas como
+> registo histórico do que foi pendente durante as iterações anteriores.
+
+1. ~~**Estado da atividade**: mantêm-se `revisado_dlab`/`revisado_supervisor` (marcadores de etapa).~~ **Substituído** por `pendente`|`em_andamento` (§0.1).
+2. ~~**Modelo de aprovação**: permanece **por agendamento** (votos individuais + conclusão de etapa).~~ **Substituído**: por agendamento mas **sem conclusão de etapa** (§0.1).
+3. ~~**Pendentes não bloqueiam avanço**:~~ **Obsoleto** — sem conclusão de etapa, os agendamentos `pendente` simplesmente permanecem na fila da etapa seguinte (§0.1).
 4. **Enums → CRUD**: convertidos apenas `UnidadeLaboratorial` (tipo de lab) e `CategoriaMaterial`. Os restantes enums (estado de material, motivo de movimentação, departamento, cargos, tipos de atividade/papel/turno) **ficam como enums fixos** — ver análise em §2.1.
 5. **Unidade do material**: passa a CRUD **global** (`unidades`), migrando os valores existentes (`ml`, `un`, `g`).
 6. **Neon + Vercel**: análise concluída em §4 — **schema único Postgres** em todos os ambientes (dev local = Postgres via Docker ou Neon dev branch; staging = Neon + Vercel). MySQL deixa de ser o dev base.
-7. **Histórico de aprovação**: agrupamento **por lote** — uma `Aprovacao` (etapa + decisão + comentário únicos) com N agendamentos via tabela de ligação `aprovacao_agendamentos`.
+7. ~~**Histórico de aprovação**: agrupamento **por lote** com `aprovacao_agendamentos`.~~ **Substituído**: `DecisaoAgendamento` com **uma linha por agendamento**, sem tabela de ligação (§0.1).
 8. **Entregável**: este `PLANO.md` + `AGENTS.md` actualizado.
+
+### 0.1. Modelo de agendamentos independentes (✅ implementado)
+
+Decisão que substitui os pontos 1, 2, 3 e 7 acima:
+
+1. **Decisão por agendamento, imutável**: `DecisaoAgendamento` (`agendamento_id`, `decisor_id`, `etapa`, `decisao`, `comentario?`, `criado_em`) é um log **append-only**. Não existe rollback, conclusão de etapa nem soft delete de decisões.
+2. **Estado da atividade derivado das sessões**: `ActividadeEstado { pendente, em_andamento, rejeitada, realizada }`. Passa a `em_andamento` quando existe a **primeira** decisão de um agendamento da atividade. "Deixar pendente" **não** conta como decisão. `rejeitada` = todas as sessões `rejeitado`; `realizada` = todas concluídas e ≥1 `realizado` — derivação central em `recalcularEstadoActividade` (✅ E6).
+3. **Fila por estado do agendamento**: `dlab` vota em `nao_revisto`; `supervisor` vota em `aprovado_dlab` **e** `pendente` (o que ficou pendente no DLab avança para o Supervisor). Um agendamento pode estar em **duas etapas activas ao mesmo tempo**, cada uma com a sua decisão.
+4. **`num_participantes` desce para `Agendamento`** (obrigatório, `>= 1`), com backfill a partir do valor que estava em `Actividade`. Sessões diferentes da mesma atividade podem ter públicos diferentes.
+5. **`HistoricoMaterial.agendamento_id`** (nullable) substitui `actividade_id`: o consumo passa a ser atribuído à **sessão** que o originou, e não à atividade inteira.
+6. **Atribuição de técnicos por sessão** (✅ E6): o par **validador+assistente** é obrigatório na aprovação do Supervisor (modal no `AprovacaoDetalhe`) e gravado atomicamente em `agendamento_tecnico` (substitui `actividade_tecnico` e `precisa_assistente`). Correcção de sessões aprovadas antigas sem técnicos via `POST /agendamentos/:id/tecnicos` (Admin/Supervisor).
+7. **Edição de atividade recria os agendamentos**: `PUT /actividades/:id/full` faz soft-delete + recria as sessões, logo os agendamentos (e as suas decisões) voltam a `nao_revisto`. O front carrega as sessões existentes antes de submeter para não as perder por omissão.
+
+Migração data-preserving aplicada ao Neon em `20260926090000_agendamento_independente`
+(collapsed dos estados legados em `pendente` antes da troca de enum, backfill das decisões a
+partir de `aprovacoes`/`aprovacao_agendamentos` e do histórico de consumo).
 
 ---
 
@@ -195,20 +215,21 @@ Frontend:
 
 ### 2.8. Detalhe de aprovação (cards → tabs, decisão em massa)
 
-> **Estado:** ✅ (E0 backend + E2 front) — `POST /aprovacoes/lote` + `AprovacaoAgendamento`; `AprovacaoDetalhe.tsx` com Tabs (Agendamentos/Materiais/Técnico & Assistente/Decisão) e painel de decisão em massa (checkbox multi-selecção + "Marcar todos" + decisão única + comentário único).
+> **Estado:** ✅ (E0 backend + E2/E6 front) — `POST /aprovacoes/lote`; `AprovacaoDetalhe.tsx` com cards Agendamentos → Decisão em massa, modal de técnicos (validador+assistente) ao aprovar no Supervisor, lote só rejeitar no Supervisor (aprovou individual com técnicos), botão «Rejeitar atividade» escondido quando há sessões aprovadas/realizadas. **Aprovar e Deixar pendente (DLab) marcam no card** («Alterar decisão»/«Concluir» persistem); **Rejeitar (qualquer etapa) e Aprovar no Supervisor gravam de imediato no modal** (justificação no modal; fechar sem confirmar = nada feito).
+> ⚠️ **Substituído por §0.1:** a decisão em lote já **não** cria `AprovacaoAgendamento`; grava uma `DecisaoAgendamento` por agendamento e **não** leva `etapa` (deduzida por agendamento). Não implementar a secção "Aprovacao + ligações" abaixo.
 
 #### Como está agora
-- `AprovacaoDetalhe` (rota `/aprovacoes/:id`) = grid de cards: Dados da Actividade, Agendamentos Propostos, Materiais Solicitados, Técnico & Assistente, Decisão.
-- Cada agendamento tem botões individuais Aprovar/Rejeitar/Deixar pendente/Rever decisão.
+- `AprovacaoDetalhe` (rota `/aprovacoes/:id`) = cards: Dados da Actividade/header, Agendamentos (votação por sessão com técnicos), Decisão em massa.
+- Cada agendamento tem botões Aprovar/Rejeitar/Deixar pendente: **Aprovar e Deixar pendente** marcam no card («Alterar decisão»/«Concluir» persistem; só DLab); **Rejeitar em qualquer etapa** grava de imediato no modal de justificação.
+- Aprovar no Supervisor abre modal obrigatório com `validador_id` + `assistente_id` (mesma pessoa permitida; `tipo='tecnico'`).
 
 #### O problema
 - Sem tabs, a tela satura com várias actividades; decidir "data a data" é lento.
 - Cada decisão gera uma `Aprovacao` por agendamento (comentário repetido).
 
 #### Como deve ficar
-- `Tabs`: **Agendamentos** (votação), **Materiais**, **Técnico & Assistente**, **Decisão** (concluir/rejeitar) — "Dados da Actividade" passa a header.
-- **Decisão em massa**: `SearchSelect`/checkbox multiselect dos agendamentos votáveis + selects de "Decisão" (Aprovar/Rejeitar/Deixar pendente) aplicados a todos de uma vez (com comentário único obrigatório no lote).
-- Voto em lote ⇒ uma `Aprovacao` com N agendamentos ligados (modelo §2.10).
+- Ordem: **Agendamentos** (votação) primeiro, **Decisão em massa** depois — "Dados da Actividade" fica como card.
+- **Decisão em massa**: checkbox multiselect dos agendamentos votáveis + decisão única (comentário obrigatório ao rejeitar; no Supervisor **só rejeitar** — aprovar exige técnicos e é individual).
 
 #### Que alterações fazer
 1. Backend (`aprovacoes.routes.js`): novo `POST /aprovacoes/lote` com body `{ agendamento_ids: [], etapa, decisao, comentario? }` — numa transação: valida sequência/estado de cada agendamento, actualiza estados e cria **uma** `Aprovacao` + ligações `aprovacao_agendamentos` (novo model). `delete`/`rollback` do lote reverte todos.
@@ -218,18 +239,18 @@ Frontend:
 
 ### 2.9. Detalhe da atividade (cards → tabs)
 
-> **Estado:** ✅ (E2) — `ActividadeDetalhe.tsx` com Tabs Geral/Agendamentos/Materiais/Documento/Histórico; header com nome/tipo/estado + laboratório; "Geral" agrupa informação + detalhes do tipo + técnico & assistente.
+> **Estado:** ✅ (E2/E6) — `ActividadeDetalhe.tsx` com Tabs Geral/Agendamentos/Materiais/Documento/Histórico; header com nome/tipo/estado + laboratório; "Geral" agrupa informação + detalhes do tipo; técnicos por sessão no tab Agendamentos (validador/assistente + confirmações).
 
 #### Como está agora
-- `ActividadeDetalhe` = grid de 7 cards (Informação Geral, Detalhes, Agendamentos, Técnico & Assistente, Materiais, Documento, Histórico de Aprovações).
+- `ActividadeDetalhe` = cards (Informação Geral, Detalhes, Agendamentos, Materiais, Documento, Histórico de Aprovações) em Tabs; REMOVIDO o card "Técnico & Assistente" (E6) — os técnicos vêm por sessão em Agendamentos.
 
 #### O problema
-- Empilhamento pesado; "Informação Geral" + "Detalhe" + "Técnico" repetem informação e podem ficar juntos.
+- Empilhamento pesado; "Informação Geral" + "Detalhe" repetem informação e podem ficar juntos.
 
 #### Como deve ficar
 - Header (nome, tipo, estado, laboratório) e `Tabs`:
-  - **Geral** = "Informação geral" + "Detalhe (tipo)" + "Técnico & Assistente" (per decisão do utilizador, ficam no mesmo painel);
-  - **Agendamentos** (com confirmações professor/técnico);
+  - **Geral** = "Informação geral" + "Detalhe (tipo)";
+  - **Agendamentos** (com técnicos da sessão e confirmações professor/técnico);
   - **Materiais**;
   - **Documento** (só projecto/estágio);
   - **Histórico de Aprovações** (ver §2.10).
@@ -240,7 +261,8 @@ Frontend:
 
 ### 2.10. Histórico de aprovação (agrupamento por lote, comentário único, agendamentos afectados)
 
-> **Estado:** ✅ (E0 backend + E2 front) — `AprovacaoGet.agendamentos[]` + histórico agrupado em `GET /actividades/:id/aprovacoes`; tab "Histórico" agrupa por lote (aprovador, etapa, decisão, comentário único, data) com lista de agendamentos afectados (badge por decisão + horário); decisões antigas agrupadas visualmente por `(etapa, decisao, comentario, aprovador, decidido_em)`.
+> **Estado:** ✅ (E5 — substituído por §0.1) — histórico **sem agrupamento por lote**: `GET /actividades/:id/decisoes` devolve uma `DecisaoAgendamento` por agendamento, com `decisor_nome`, `agendamento_nome` e `h_inicio`/`h_fim`; a tab "Histórico" lista essas linhas. Decisões em lote gravam o **mesmo comentário em cada linha** (não há linha de lote partilhada).
+> ⚠️ **Substituído por §0.1:** não agrupar por lote, não introduzir `aprovacao_agendamentos`, não voltar a `GET /actividades/:id/aprovacoes`. O resto desta secção é histórico.
 
 #### Como está agora
 - `GET /actividades/:id/aprovacoes` devolve **uma linha por voto**; decisões em lote ainda não existem — mas hoje, ao votar vários agendamentos com o mesmo comentário, cada voto tem o seu próprio `Aprovacao.comentario` repetido.
@@ -261,7 +283,8 @@ Frontend:
 
 ### 2.11. Fluxo de aprovação de agendamentos (pendentes não bloqueiam avanço — duas etapas activas)
 
-> **Estado:** ✅ (E0) — implementado e validado em smoke test (atividade avança com agendamento não decidido da etapa).
+> **Estado:** ✅ resolvido, mas **por outra via** (§0.1) — o `finalizar` deixou de existir; os agendamentos `pendente` avançam simplesmente porque o Supervisor passa a vê-los na fila (`aprovado_dlab`+`pendente`) e a atividade deixou de ter marcador de etapa (`pendente|em_andamento`).
+> ⚠️ **Substituído por §0.1:** não reintroduzir `POST /aprovacoes/:id/finalizar` nem `ActividadeEstado` com marcadores de etapa. O resto desta secção é histórico.
 
 #### Como está agora
 - `finalizar` (DLab) exige zero `nao_revisto`; `finalizar` (Supervisor) exige **todos** `aprovado_supervisor`|`rejeitado` — qualquer `pendente` bloqueia a conclusão final; a atividade tem um único estado de etapa (`pendente|revisado_dlab|revisado_supervisor|rejeitado`).
@@ -418,7 +441,7 @@ O fluxo DLab → Supervisor está **hardcoded**: `AprovacaoEtapa {dlab, supervis
 1. **[Crítico]** `window.prompt` para reposição de senha (`UtilizadoresList.tsx:59`) — divulga fluxo de reset sem modal próprio; substituir (§2.3).
 2. **[Alto]** Sem validação de senha actual ao alterar a própria senha (`PUT /user/:id`) — sessão deixa trocar a senha sem reautenticação (§2.12).
 3. **[Alto]** Perfil não-admin: `GET /user/:id` é admin-only → não-admin fica sem perfil (availability bug + 403 inesperado) (§2.12).
-4. **[Médio]** Sem `helmet` (headers de segurança) e sem `express-rate-limit` no `/user/login` (brute force). — ✅ **[E4]**: `helmet` + `express-rate-limit` (global 300/15min, login 20/15min).
+4. **[Médio]** Sem `helmet` (headers de segurança) e sem `express-rate-limit` no `/user/login` (brute force). — ✅ **[E4]**: `helmet` + `express-rate-limit` por camada (leituras 5000/15min, escritas 1000/15min, login 20/15min).
 5. **[Médio]** CORS aberto (`cors()` sem whitelist) — em produção, qualquer origem fala com a API se o token vazar. — ✅ **[E4]**: whitelist `localhost` + `*.vercel.app` + `CORS_ORIGINS` (env); pedidos sem Origin aceites.
 6. **[Médio]** JWT sem refresh tokens/revogação; logout apenas client-side.
 7. **[Médio]** `JWT_SECRET` com fallback hardcoded (`dlab-dev-secret-change-in-production`) — forçar via env em produção, sem default.
@@ -429,12 +452,12 @@ O fluxo DLab → Supervisor está **hardcoded**: `AprovacaoEtapa {dlab, supervis
 ### 5.2. Funcionalidade (bugs/desvios)
 1. **[Alto]** `finalizar` Supervisor bloqueia com agendamentos `pendente` — comportamento contrário ao desejado (§2.11).
 2. **[Alto]** Perfil não-admin sem dados (bug de consumo, §2.12).
-3. **[Médio]** Histórico de aprovações com comentário repetido por agendamento e sem agendamentos afectados (§2.10).
+3. **[Médio]** ~~Histórico de aprovações com comentário repetido por agendamento e sem agendamentos afectados~~ (§2.10). — ✅ resolvido com `DecisaoAgendamento` (§0.1): uma linha por agendamento, com o agendamento e o decisor associados.
 4. **[Médio]** `GET /disciplinas/:id` e `PUT /curso-disciplinas/:id` ausentes (spec original tinha).
 5. **[Médio]** Relatórios: PDF mínimo com raw JSON (`buildMinimalPdf`, 3000 chars) — sem pdfkit.
 6. **[Médio]** Sem relatório automático mensal nem alertas de stock real (cron/socket), `NotificacoesContext` usa mocks.
 7. **[Baixo]** `mockData.ts` morto; `server/seed.js`, `server/data/*`, `config.js/DATA_FILE` legado não consumidos (§4). — ✅ **[E4]** removidos (ficheiros + `DATA_FILE` do `config.js`).
-8. **[Baixo]** `scripts/migrate-json.js` desactualizado (usa `utilizador_id`, sem `Agendamento.estado`, sem `Aprovacao.agendamento_id`).
+8. **[Baixo]** ~~`scripts/migrate-json.js` desactualizado~~ — ✅ **[E4]** ficheiro removido (não era consumido em runtime).
 9. **[Baixo]** Calendário começa fixo em Jun/2026 e sem "Hoje"/visões (§2.7).
 10. **[Baixo]** Listagens sem filtros/paginação (Labs, Cursos, Disciplinas, Aprovações, Relatórios) (§2.2).
 11. **[Baixo]** `AprovacaoDetalhe`/`ActividadeDetalhe` saturadas; falta tabs (§2.8/2.9).
@@ -460,4 +483,4 @@ O fluxo DLab → Supervisor está **hardcoded**: `AprovacaoEtapa {dlab, supervis
 2. **E1 — Componentes partilhados**: `SearchSelect` (§2.1), `NumberInput` + erros por campo (§2.13), `ResetPasswordModal` (§2.3), `FiltersBar`/`SimplePagination` em todas as listas (§2.2). (**✅ concluído** — pendente do §2.13: erros por campo em tempo-real, e do §2.2: ordenação explícita na fila, remetidos para E2.)
 3. **E2 — Telas novas/refactor**: `EstudanteDetalhe` (§2.4), `CursoDetalhe` + simplificação de Disciplinas (§2.5), calendário 3 visões + "Hoje" + filtros `de`/`ate` no backend (§2.7), tabs Aprovação + decisão em massa (§2.8), tabs Atividade + histórico por lote (§2.9/2.10), Perfil (§2.12), Configuração (§3). (**✅ concluído** — pendente remetido para front futuro: tabs Lab (§2.6), erros por campo em tempo-real (§2.13), ordenação explícita na fila (§2.2/2.6).)
 4. **E3 — Ambientes**: provider Postgres + adapters + Vercel function + Neon + CI (§4). (**✅ concluído** — Neon ligado + migração `init` + seed; projecto Vercel `dlab` com `DATABASE_URL`/`DIRECT_URL` (Production+Preview); deploy live https://dlab-gray.vercel.app; scripts `deploy`/`dev`. Pendente opcional: CI GitHub Actions.)
-5. **E4 — Hardening/auditoria**: helmet/rate-limit/CORS whitelist, remoção de código morto, PDF real, notificações socket/cron (opcional). (**✅ concluído o bloco principal** — helmet + express-rate-limit + CORS whitelist por env; removidos `mockData.ts`/`seed.js` legados/`server/data`/`DATA_FILE` e deps não usadas (`react-query`, `react-table`, `zustand`, `supabase`, `zod`, `resolvers`); **lint a 0 erros** (16 corrigidos; 17 warnings documentados: `exhaustive-deps`×9, `only-export-components`×8). **Pendentes:** ❌/🔴 PDF real via pdfkit (§6 RF19), notificações socket/cron reais (§5 RF14/RF18), CI GitHub Actions, 17 warnings de lint.)
+5. **E4 — Hardening/auditoria**: helmet/rate-limit/CORS whitelist, remoção de código morto, PDF real, notificações socket/cron (opcional). (**✅ concluído o bloco principal** — helmet + express-rate-limit por camada (leituras 5000/15min, escritas 1000/15min, login 20/15min) + CORS whitelist por env; removidos `mockData.ts`/`seed.js` legados/`server/data`/`DATA_FILE` e deps não usadas (`react-query`, `react-table`, `zustand`, `supabase`, `zod`, `resolvers`); **lint a 0 erros** (16 corrigidos; 17 warnings documentados: `exhaustive-deps`×9, `only-export-components`×8). **Pendentes:** ❌/🔴 PDF real via pdfkit (§6 RF19), notificações socket/cron reais (§5 RF14/RF18), CI GitHub Actions, 17 warnings de lint.)

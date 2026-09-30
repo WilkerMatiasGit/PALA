@@ -44,8 +44,10 @@ export default function Dashboard() {
 
   useEffect(() => { load(); }, []);
 
-  const pendentes = actividades.filter((a) => a.estado === 'pendente' || a.estado === 'revisado_dlab').length;
-  const aprovadas = actividades.filter((a) => a.estado === 'revisado_supervisor').length;
+  const pendentes = actividades.filter((a) => a.estado === 'pendente').length;
+  // `agendamentos` só traz agendamentos já aprovados pelo Supervisor (endpoint do calendário),
+  // por isso "aprovadas" = atividades com pelo menos uma sessão na agenda.
+  const aprovadas = new Set(agendamentos.map((g) => g.actividade_id)).size;
   const stockAlerts = materiais.filter((m) => m.quantidade <= m.quantidade_minima).length;
   const hoje = agendamentos.filter((a) => {
     const d = new Date(a.hora_inicio);
@@ -63,7 +65,7 @@ export default function Dashboard() {
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard icon={Clock} label="Pendentes" value={pendentes} color="amber" />
-            <StatCard icon={CheckCircle2} label="Aprovadas" value={aprovadas} color="emerald" />
+            <StatCard icon={CheckCircle2} label="Na agenda" value={aprovadas} color="emerald" />
             {user?.tipo !== 'professor' && (
               <StatCard icon={AlertTriangle} label="Alertas de Stock" value={stockAlerts} color="red" />
             )}

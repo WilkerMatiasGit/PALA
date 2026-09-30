@@ -14,8 +14,6 @@ export interface ActividadeGet {
   laboratorio_nome: string;
   tipo: ActividadeTipo;
   estado: ActividadeEstado;
-  num_participantes: number;
-  precisa_assistente: boolean;
   observacoes: string;
   criado_em: string;
   actualizado_em: string;
@@ -26,9 +24,7 @@ export interface ActividadeUpsert {
   nome: string;
   responsavel_id: number;
   laboratorio_id: number;
-  num_participantes: number;
   observacoes: string;
-  precisa_assistente: boolean;
   tipo: ActividadeTipo;
 }
 
@@ -40,7 +36,11 @@ export type ActividadeDetalhesPayload =
 
 export interface ActividadeFullUpsert extends ActividadeUpsert {
   detalhes?: ActividadeDetalhesPayload;
-  agendamentos?: { hora_inicio: string; hora_fim: string }[];
+  agendamentos?: {
+    hora_inicio: string;
+    hora_fim: string;
+    num_participantes: number;
+  }[];
   materiais?: { material_id: number; quantidade_estimada: number }[];
 }
 
@@ -129,24 +129,6 @@ export interface EstagioUpsert {
   estudante_id: number;
   data_inicio: string;
   data_fim: string;
-}
-
-export interface ActividadeTecnicoGet {
-  id: number;
-  actividade_id: number;
-  actividade_nome: string;
-  utilizador_id: number;
-  utilizador_nome: string;
-  papel: 'validador' | 'assistente';
-  criado_em: string;
-  actualizado_em: string;
-}
-
-export interface ActividadeTecnicoUpsert {
-  id?: number;
-  actividade_id: number;
-  utilizador_id: number;
-  papel: 'validador' | 'assistente';
 }
 
 export interface ActividadeMaterialGet {

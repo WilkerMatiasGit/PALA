@@ -29,10 +29,10 @@ async function buildDados(labId, mes, ano) {
   }
 
   let baixas = 0;
-  if (actIds.length > 0) {
+  if (realizados.length > 0) {
     const agg = await prisma.historicoMaterial.aggregate({
       _sum: { quantidade_movimentada: true },
-      where: { activo: true, motivo: 'consumo_actividade', actividade_id: { in: actIds } },
+      where: { activo: true, motivo: 'consumo_actividade', agendamento_id: { in: realizados.map((g) => g.id) } },
     });
     baixas = Math.abs(agg._sum.quantidade_movimentada ?? 0);
   }

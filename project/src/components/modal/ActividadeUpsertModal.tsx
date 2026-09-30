@@ -6,7 +6,6 @@ import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
@@ -37,8 +36,20 @@ interface Props {
   onSaved: () => void;
 }
 
-type AgendamentoBloc = { data: string; hora_inicio: string; hora_fim: string };
+type AgendamentoBloc = {
+  data: string;
+  hora_inicio: string;
+  hora_fim: string;
+  num_participantes: string;
+};
 type MaterialReq = { material_id: number; quantidade_estimada: number };
+
+const blocoVazio = (): AgendamentoBloc => ({
+  data: '',
+  hora_inicio: '',
+  hora_fim: '',
+  num_participantes: '1',
+});
 
 const toISODate = (d: Date): string => {
   const y = d.getFullYear();
@@ -73,8 +84,6 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
   const [nome, setNome] = useState('');
   const [labId, setLabId] = useState('');
   const [tipo, setTipo] = useState<ActividadeTipo>('aula');
-  const [numParticipantes, setNumParticipantes] = useState('1');
-  const [precisaAssistente, setPrecisaAssistente] = useState(false);
   const [observacoes, setObservacoes] = useState('');
   const [responsavelId, setResponsavelId] = useState('');
 
@@ -103,8 +112,8 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
   const [dataFim, setDataFim] = useState('');
   const [estudanteId, setEstudanteId] = useState('');
 
-  // Step 3: agendamentos
-  const [agendamentos, setAgendamentos] = useState<AgendamentoBloc[]>([{ data: '', hora_inicio: '', hora_fim: '' }]);
+  // Step 3: agendamentos (cada sessão tem o seu próprio nº de participantes)
+  const [agendamentos, setAgendamentos] = useState<AgendamentoBloc[]>([blocoVazio()]);
 
   // Step 4: materiais
   const [materialReqs, setMaterialReqs] = useState<MaterialReq[]>([]);
@@ -130,12 +139,12 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
 
   const resetForm = () => {
     setStep(1);
-    setNome(''); setLabId(''); setTipo('aula'); setNumParticipantes('1');
-    setPrecisaAssistente(false); setObservacoes(''); setResponsavelId('');
+    setNome(''); setLabId(''); setTipo('aula');
+    setObservacoes(''); setResponsavelId('');
     setCursoDisciplinaId(''); setTema(''); setTurno(''); setNumeroTurma('');
     setNomeVisitante(''); setInstituicao(''); setTelefone(''); setEmailVisitante('');
     setTitulo(''); setDescricao(''); setDataInicio(''); setDataFim(''); setEstudanteId('');
-    setAgendamentos([{ data: '', hora_inicio: '', hora_fim: '' }]);
+    setAgendamentos([blocoVazio()]);
     setMaterialReqs([]);
   };
 
@@ -144,9 +153,25 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
       resetForm();
       if (actividade) {
         setNome(actividade.nome); setLabId(String(actividade.laboratorio_id));
-        setTipo(actividade.tipo); setNumParticipantes(String(actividade.num_participantes));
-        setPrecisaAssistente(actividade.precisa_assistente); setObservacoes(actividade.observacoes);
+        setTipo(actividade.tipo);
+        setObservacoes(actividade.observacoes);
         setResponsavelId(String(actividade.responsavel_id));
+        // O PUT /:id/full substitui os agendamentos — é preciso carregar os atuais.
+        agendamentosService.listByActividade(actividade.id).then((ags) => {
+          if (ags.length === 0) return;
+          setAgendamentos(
+            ags.map((g) => {
+              const inicio = new Date(g.hora_inicio);
+              const fim = new Date(g.hora_fim);
+              return {
+                data: toISODate(inicio),
+                hora_inicio: `${String(inicio.getHours()).padStart(2, '0')}:${String(inicio.getMinutes()).padStart(2, '0')}`,
+                hora_fim: `${String(fim.getHours()).padStart(2, '0')}:${String(fim.getMinutes()).padStart(2, '0')}`,
+                num_participantes: String(g.num_participantes ?? 1),
+              };
+            })
+          );
+        }).catch(() => setAgendamentos([blocoVazio()]));
       }
     }
     onOpenChange(v);
@@ -174,10 +199,13 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
       if (filled.length === 0) return 'Adicione pelo menos uma sessão (dia + horas)';
       const currentActId = actividade?.id;
       const todayStr = hojeISO();
-      // 1) cada bloco: dia não passado + hora fim > hora início
+      // 1) cada bloco: dia não passado + hora fim > hora início + participantes >= 1
       for (const a of filled) {
         if (a.data < todayStr) return 'O dia da sessão não pode estar no passado';
         if (a.hora_fim <= a.hora_inicio) return 'A hora de fim deve ser posterior à hora de início';
+        if (!Number.isInteger(Number(a.num_participantes)) || Number(a.num_participantes) < 1) {
+          return 'Indique o número de participantes (mínimo 1) em cada sessão';
+        }
       }
       // 2) conflito entre blocos do próprio formulário (mesmo dia + sobreposição)
       for (let i = 0; i < filled.length; i++) {
@@ -216,6 +244,9 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
     if (a.data < hojeISO()) return 'O dia não pode estar no passado';
     if (!a.hora_inicio || !a.hora_fim) return 'Indique a hora de início e de fim';
     if (a.hora_fim <= a.hora_inicio) return 'A hora de fim deve ser posterior à hora de início';
+    if (!Number.isInteger(Number(a.num_participantes)) || Number(a.num_participantes) < 1) {
+      return 'Nº de participantes inválido (mínimo 1)';
+    }
     return null;
   };
 
@@ -226,9 +257,7 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
         nome,
         responsavel_id: Number(responsavelId || (actividade?.responsavel_id ?? user?.id ?? 1)),
         laboratorio_id: Number(labId),
-        num_participantes: Number(numParticipantes),
         observacoes,
-        precisa_assistente: precisaAssistente,
         tipo,
       };
 
@@ -246,7 +275,11 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
         detalhes,
         agendamentos: agendamentos
           .filter((a) => a.data && a.hora_inicio && a.hora_fim)
-          .map((a) => ({ hora_inicio: `${a.data}T${a.hora_inicio}`, hora_fim: `${a.data}T${a.hora_fim}` })),
+          .map((a) => ({
+            hora_inicio: `${a.data}T${a.hora_inicio}`,
+            hora_fim: `${a.data}T${a.hora_fim}`,
+            num_participantes: Number(a.num_participantes),
+          })),
         materiais: materialReqs.map((m) => ({ material_id: m.material_id, quantidade_estimada: m.quantidade_estimada })),
       };
 
@@ -315,16 +348,6 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>{ACTIVIDADE_TIPO_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
                 </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="num-part">Nº participantes</Label>
-                <NumberInput id="num-part" value={numParticipantes} onValueChange={setNumParticipantes} />
-              </div>
-              <div className="flex items-center gap-3 pt-6">
-                <Switch checked={precisaAssistente} onCheckedChange={setPrecisaAssistente} />
-                <Label>Precisa de assistente</Label>
               </div>
             </div>
             <div className="space-y-2">
@@ -455,13 +478,16 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
         {/* Step 3: Agendamentos */}
         {step === 3 && (
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">Adicione as sessões: escolha primeiro o dia e, em seguida, o intervalo de horas dentro desse dia.</p>
+            <p className="text-sm text-muted-foreground">
+              Adicione as sessões: escolha primeiro o dia e, em seguida, o intervalo de horas dentro desse dia. O
+              número de participantes é definido por sessão.
+            </p>
             {agendamentos.map((ag, i) => {
               const err = blocoError(ag);
               return (
                 <Card key={i}>
                   <CardContent className="space-y-3 pt-4">
-                    <div className="flex items-end gap-2">
+                    <div className="flex flex-wrap items-end gap-2">
                       <div className="space-y-1">
                         <Label className="text-xs">Dia</Label>
                         <Input type="date" min={hojeISO()} value={ag.data} onChange={(e) => {
@@ -480,6 +506,12 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
                           const copy = [...agendamentos]; copy[i].hora_fim = e.target.value; setAgendamentos(copy);
                         }} />
                       </div>
+                      <div className="w-28 space-y-1">
+                        <Label className="text-xs">Nº participantes</Label>
+                        <NumberInput value={ag.num_participantes} onValueChange={(v) => {
+                          const copy = [...agendamentos]; copy[i].num_participantes = v; setAgendamentos(copy);
+                        }} />
+                      </div>
                       {agendamentos.length > 1 && (
                         <Button variant="ghost" size="icon" onClick={() => setAgendamentos(agendamentos.filter((_, idx) => idx !== i))}>
                           <Trash2 className="h-4 w-4 text-destructive" />
@@ -491,7 +523,7 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
                 </Card>
               );
             })}
-            <Button variant="outline" size="sm" onClick={() => setAgendamentos([...agendamentos, { data: '', hora_inicio: '', hora_fim: '' }])}>
+            <Button variant="outline" size="sm" onClick={() => setAgendamentos([...agendamentos, blocoVazio()])}>
               <Plus className="mr-2 h-4 w-4" /> Adicionar sessão
             </Button>
           </div>

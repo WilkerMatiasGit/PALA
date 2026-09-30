@@ -1,60 +1,57 @@
 import { api, apiErrorMessage } from './api';
-import type { AprovacaoGet, AprovacaoCreate, AprovacaoLote } from '@/types/aprovacao.types';
+import type {
+  AprovacaoCreate,
+  AprovacaoDetalheGet,
+  AprovacaoFilaItem,
+  AprovacaoLote,
+  DecisaoGet,
+} from '@/types/aprovacao.types';
 
 export const aprovacoesService = {
-  // GET /aprovacoes — fila adaptativa (backend decide por role via JWT)
-  async listFila(): Promise<AprovacaoGet[]> {
-    const { data } = await api.get<AprovacaoGet[]>('/aprovacoes');
+  // GET /aprovacoes — fila de atividades com agendamentos por decidir.
+  // O estado da etapa (dlab/supervisor) e filtrado no backend a partir do role.
+  async listFila(): Promise<AprovacaoFilaItem[]> {
+    const { data } = await api.get<AprovacaoFilaItem[]>('/aprovacoes');
     return data;
   },
 
-  // GET /aprovacoes/:id — :id é o actividad_id (fila keyed por atividade)
-  async get(id: number): Promise<AprovacaoGet> {
+  // GET /aprovacoes/:id — :id é o actividade_id
+  async get(id: number): Promise<AprovacaoDetalheGet> {
     try {
-      const { data } = await api.get<AprovacaoGet>(`/aprovacoes/${id}`);
+      const { data } = await api.get<AprovacaoDetalheGet>(`/aprovacoes/${id}`);
       return data;
     } catch (err) {
       throw new Error(apiErrorMessage(err));
     }
   },
 
-  async listByActividade(actividadeId: number): Promise<AprovacaoGet[]> {
-    const { data } = await api.get<AprovacaoGet[]>(`/actividades/${actividadeId}/aprovacoes`);
+  // GET /actividades/:id/decisoes — histórico de decisões (log imutável)
+  async listDecisoes(actividadeId: number): Promise<DecisaoGet[]> {
+    const { data } = await api.get<DecisaoGet[]>(`/actividades/${actividadeId}/decisoes`);
     return data;
   },
 
-  // POST /aprovacoes — voto INDIVIDUAL por agendamento (aprovador derivado do JWT)
-  async create(data: AprovacaoCreate): Promise<AprovacaoGet> {
+  // POST /aprovacoes — decisão individual sobre um agendamento
+  async create(data: AprovacaoCreate): Promise<DecisaoGet> {
     try {
-      const { data: created } = await api.post<AprovacaoGet>('/aprovacoes', data);
+      const { data: created } = await api.post<DecisaoGet>('/aprovacoes', data);
       return created;
     } catch (err) {
       throw new Error(apiErrorMessage(err));
     }
   },
 
-  // POST /aprovacoes/lote — decisão em massa sobre vários agendamentos
-  async createLote(data: AprovacaoLote): Promise<AprovacaoGet> {
+  // POST /aprovacoes/lote — decisão em massa (a etapa é deduzida de cada agendamento)
+  async createLote(data: AprovacaoLote): Promise<DecisaoGet[]> {
     try {
-      const { data: created } = await api.post<AprovacaoGet>('/aprovacoes/lote', data);
+      const { data: created } = await api.post<DecisaoGet[]>('/aprovacoes/lote', data);
       return created;
     } catch (err) {
       throw new Error(apiErrorMessage(err));
     }
   },
 
-  // POST /aprovacoes/:id/finalizar — concluir a revisão da etapa da atividade.
-  // O comentário/parecer da sessão é obrigatório na conclusão.
-  async finalizar(actividadeId: number, comentario: string): Promise<{ message: string; estado: string }> {
-    try {
-      const { data } = await api.post(`/aprovacoes/${actividadeId}/finalizar`, { comentario });
-      return data;
-    } catch (err) {
-      throw new Error(apiErrorMessage(err));
-    }
-  },
-
-  // POST /aprovacoes/pendente — "Deixar pendente" (apenas etapa DLab)
+  // POST /aprovacoes/pendente — "Deixar pendente" (não cria decisão, mantém a fila)
   async deixarPendente(agendamentoId: number): Promise<void> {
     try {
       await api.post('/aprovacoes/pendente', { agendamento_id: agendamentoId });
@@ -63,20 +60,16 @@ export const aprovacoesService = {
     }
   },
 
-  // POST /aprovacoes/rollback — reverter a decisão individual de um agendamento
-  async rollback(agendamentoId: number, etapa: 'dlab' | 'supervisor'): Promise<{ message: string; estado: string }> {
+  // POST /aprovacoes/:id/rejeitar — rejeita todos os agendamentos em espera
+  async rejeitarActividade(
+    actividadeId: number,
+    comentario: string
+  ): Promise<{ message: string; rejeitados: number }> {
     try {
-      const { data } = await api.post('/aprovacoes/rollback', { agendamento_id: agendamentoId, etapa });
-      return data;
-    } catch (err) {
-      throw new Error(apiErrorMessage(err));
-    }
-  },
-
-  // POST /aprovacoes/:id/rejeitar — rejeição explícita da atividade inteira
-  async rejeitarActividade(actividadeId: number, comentario: string): Promise<AprovacaoGet> {
-    try {
-      const { data } = await api.post<AprovacaoGet>(`/aprovacoes/${actividadeId}/rejeitar`, { comentario });
+      const { data } = await api.post<{ message: string; rejeitados: number }>(
+        `/aprovacoes/${actividadeId}/rejeitar`,
+        { comentario }
+      );
       return data;
     } catch (err) {
       throw new Error(apiErrorMessage(err));

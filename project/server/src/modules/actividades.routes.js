@@ -7,7 +7,6 @@ import {
   toVisitaGet,
   toProjectoGet,
   toEstagioGet,
-  toActividadeTecnicoGet,
   toActividadeMaterialGet,
   toAgendamentoGet,
 } from '../utils/dto.js';
@@ -55,7 +54,7 @@ router.get('/', async (req, res, next) => {
     if (req.user.tipo === 'professor') {
       where.responsavel_id = req.user.id;
     } else if (req.user.tipo === 'tecnico') {
-      where.atividadeTecnicos = { some: { activo: true, utilizador_id: req.user.id } };
+      where.agendamentos = { some: { activo: true, tecnicos: { some: { activo: true, utilizador_id: req.user.id } } } };
     }
     const rows = await prisma.actividade.findMany({ where, include: actInclude, orderBy: { id: 'asc' } });
     res.json(rows.map(toActividadeGet));
@@ -78,7 +77,7 @@ router.get('/:id', async (req, res, next) => {
 // POST /actividades — criar
 router.post('/', rbac(...ACT_ROLES), async (req, res, next) => {
   try {
-    const { nome, responsavel_id, laboratorio_id, num_participantes, observacoes, precisa_assistente, tipo } = req.body || {};
+    const { nome, responsavel_id, laboratorio_id, observacoes, tipo } = req.body || {};
     if (!nome || !laboratorio_id || !tipo) {
       return res.status(400).json({ message: 'nome, laboratorio_id e tipo são obrigatórios' });
     }
@@ -91,8 +90,6 @@ router.post('/', rbac(...ACT_ROLES), async (req, res, next) => {
         laboratorio_id: Number(laboratorio_id),
         tipo,
         estado: 'pendente',
-        num_participantes: num_participantes ?? 1,
-        precisa_assistente: !!precisa_assistente,
         observacoes: observacoes || '',
       },
       include: actInclude,
@@ -108,13 +105,11 @@ router.put('/:id', rbac(...ACT_ROLES), async (req, res, next) => {
   try {
     const a = await prisma.actividade.findUnique({ where: { id: Number(req.params.id) } });
     if (!a) return res.status(404).json({ message: 'Atividade não encontrada' });
-    const { nome, responsavel_id, laboratorio_id, num_participantes, observacoes, precisa_assistente, tipo } = req.body || {};
+    const { nome, responsavel_id, laboratorio_id, observacoes, tipo } = req.body || {};
     const data = {};
     if (nome !== undefined) data.nome = nome;
     if (laboratorio_id !== undefined) data.laboratorio_id = Number(laboratorio_id);
-    if (num_participantes !== undefined) data.num_participantes = num_participantes;
     if (observacoes !== undefined) data.observacoes = observacoes;
-    if (precisa_assistente !== undefined) data.precisa_assistente = !!precisa_assistente;
     if (tipo !== undefined) data.tipo = tipo;
     // o responsável apenas pode ser alterado por quem pode designar terceiros
     if (responsavel_id !== undefined && PODE_DESIGNAR.includes(req.user.tipo)) {
@@ -250,8 +245,17 @@ async function actualizarEspecialidade(tx, tipo, actividadId, spe) {
 
 async function crearAgendamentos(tx, actividadId, ags) {
   for (const g of ags) {
+    const participantes = Number(g.num_participantes);
+    if (!Number.isInteger(participantes) || participantes < 1) {
+      throw HTTP(400, 'Cada agendamento precisa de num_participantes maior que zero');
+    }
     await tx.agendamento.create({
-      data: { actividade_id: actividadId, hora_inicio: new Date(g.hora_inicio), hora_fim: new Date(g.hora_fim) },
+      data: {
+        actividade_id: actividadId,
+        num_participantes: participantes,
+        hora_inicio: new Date(g.hora_inicio),
+        hora_fim: new Date(g.hora_fim),
+      },
     });
   }
 }
@@ -267,7 +271,7 @@ async function crearMateriais(tx, actividadeId, mats) {
 // POST /actividades/full — criação atómica (tudo ou nada)
 router.post('/full', rbac(...ACT_ROLES), async (req, res, next) => {
   try {
-    const { nome, responsavel_id, laboratorio_id, num_participantes, observacoes, precisa_assistente, tipo, detalhes, agendamentos, materiais } = req.body || {};
+    const { nome, responsavel_id, laboratorio_id, observacoes, tipo, detalhes, agendamentos, materiais } = req.body || {};
     if (!nome || !laboratorio_id || !tipo) {
       return res.status(400).json({ message: 'nome, laboratorio_id e tipo são obrigatórios' });
     }
@@ -296,8 +300,6 @@ router.post('/full', rbac(...ACT_ROLES), async (req, res, next) => {
           laboratorio_id: Number(laboratorio_id),
           tipo,
           estado: 'pendente',
-          num_participantes: num_participantes ?? 1,
-          precisa_assistente: !!precisa_assistente,
           observacoes: observacoes || '',
         },
       });
@@ -319,7 +321,7 @@ router.put('/:id/full', rbac(...ACT_ROLES), async (req, res, next) => {
     const act = await prisma.actividade.findUnique({ where: { id: Number(req.params.id) } });
     if (!act || !act.activo) return res.status(404).json({ message: 'Atividade não encontrada' });
 
-    const { nome, responsavel_id, laboratorio_id, num_participantes, observacoes, precisa_assistente, tipo, detalhes, agendamentos, materiais } = req.body || {};
+    const { nome, responsavel_id, laboratorio_id, observacoes, tipo, detalhes, agendamentos, materiais } = req.body || {};
     const novoTipo = tipo || act.tipo;
     const novoLabId = laboratorio_id != null ? Number(laboratorio_id) : act.laboratorio_id;
     if (!['aula', 'visita', 'projecto', 'estagio'].includes(novoTipo)) {
@@ -347,9 +349,7 @@ router.put('/:id/full', rbac(...ACT_ROLES), async (req, res, next) => {
     if (nome !== undefined) data.nome = nome;
     if (respId !== undefined) data.responsavel_id = respId;
     if (laboratorio_id !== undefined) data.laboratorio_id = Number(laboratorio_id);
-    if (num_participantes !== undefined) data.num_participantes = num_participantes;
     if (observacoes !== undefined) data.observacoes = observacoes;
-    if (precisa_assistente !== undefined) data.precisa_assistente = !!precisa_assistente;
     if (tipo !== undefined) data.tipo = tipo;
 
     const atualizado = await prisma.$transaction(async (tx) => {
@@ -433,19 +433,6 @@ router.get('/:id/estagio', async (req, res, next) => {
     next(err);
   }
 });
-// GET /actividades/:id/tecnicos
-router.get('/:id/tecnicos', async (req, res, next) => {
-  try {
-    const rows = await prisma.actividadeTecnico.findMany({
-      where: { actividade_id: Number(req.params.id), activo: true },
-      include: { utilizador: true },
-      orderBy: { id: 'asc' },
-    });
-    res.json(rows.map(toActividadeTecnicoGet));
-  } catch (err) {
-    next(err);
-  }
-});
 // GET /actividades/:id/materiais
 router.get('/:id/materiais', async (req, res, next) => {
   try {
@@ -464,7 +451,10 @@ router.get('/:id/agendamentos', async (req, res, next) => {
   try {
     const rows = await prisma.agendamento.findMany({
       where: { actividade_id: Number(req.params.id), activo: true },
-      include: { actividade: { include: { laboratorio: true } } },
+      include: {
+        actividade: { include: { laboratorio: true } },
+        tecnicos: { where: { activo: true }, include: { utilizador: true } },
+      },
       orderBy: { id: 'asc' },
     });
     res.json(rows.map(toAgendamentoGet));

@@ -40,10 +40,10 @@ enum ActividadeTipo {
 }
 
 enum ActividadeEstado {
-  pendente
-  revisado_dlab
-  revisado_supervisor
-  rejeitado
+  pendente // nenhum agendamento recebeu decisão ainda
+  em_andamento // pelo menos um agendamento já recebeu uma decisão (DLab ou Supervisor)
+  rejeitada // todos os agendamentos estão rejeitados (ou rejeição explícita da atividade)
+  realizada // todos os agendamentos concluídos (realizado ou rejeitado) e pelo menos um realizado
 }
 
 enum AgendamentoEstado {
@@ -101,11 +101,11 @@ model Utilizador {
   actualizado_em DateTime   @updatedAt
   activo     Boolean        @default(true)
 
-  actividadesCriadas      Actividade[] @relation("ActividadeCriadoPor")
-  actividadesResponsaveis Actividade[] @relation("ActividadeResponsavel")
+  actividadesCriadas      Actividade[]        @relation("ActividadeCriadoPor")
+  actividadesResponsaveis Actividade[]        @relation("ActividadeResponsavel")
   historico               HistoricoMaterial[]
-  aprovacoes              Aprovacao[]
-  atividadeTecnicos       ActividadeTecnico[]
+  decisoesAgendamento     DecisaoAgendamento[]
+  agendamentoTecnicos     AgendamentoTecnico[]
   relatorios              Relatorio[]
 
   @@map("utilizadores")
@@ -255,7 +255,7 @@ model HistoricoMaterial {
   id                   Int              @id @default(autoincrement())
   material_id          Int
   utilizador_id        Int
-  actividade_id        Int?             // NULL se for acidente/compra fora de aula
+  agendamento_id       Int?             // NULL se for movimentação manual (compra/quebra/ajuste/outro)
   quantidade_movimentada Int
   motivo               MovimentacaoMotivo
   descricao            String
@@ -265,7 +265,7 @@ model HistoricoMaterial {
 
   material             Material         @relation(fields: [material_id], references: [id])
   utilizador           Utilizador       @relation(fields: [utilizador_id], references: [id])
-  actividade           Actividade?      @relation(fields: [actividade_id], references: [id])
+  agendamento          Agendamento?     @relation(fields: [agendamento_id], references: [id])
 
   @@map("historico_materiais")
 }
@@ -281,8 +281,6 @@ model Actividade {
   tipo              ActividadeTipo
   estado            ActividadeEstado @default(pendente)
   observacoes       String?
-  num_participantes Int             @default(1)
-  precisa_assistente Boolean        @default(false)
   criado_em         DateTime        @default(now())
   actualizado_em    DateTime        @updatedAt
   activo            Boolean         @default(true)
@@ -291,32 +289,34 @@ model Actividade {
   responsavel          Utilizador     @relation("ActividadeResponsavel", fields: [responsavel_id], references: [id])
   laboratorio          Laboratorio    @relation(fields: [laboratorio_id], references: [id])
   agendamentos       Agendamento[]
-  aprovacoes         Aprovacao[]
   atividadeMateriais ActividadeMaterial[]
-  atividadeTecnicos  ActividadeTecnico[]
   aula               Aula?
   visita             Visita?
   projecto           Projecto?
   estagio            Estagio?
-  historico          HistoricoMaterial[]
 
   @@map("actividades")
 }
 
-model ActividadeTecnico {
+// Técnico por AGENDAMENTO (substitui ActividadeTecnico): a atribuição de
+// validador e assistente é feita AGENDAMENTO a AGENDAMENTO, na aprovação do
+// Supervisor (ou via POST /agendamentos/:id/tecnicos, Admin/Supervisor).
+// Ambos os papéis são sempre obrigatórios; a mesma pessoa pode exercer os dois.
+model AgendamentoTecnico {
   id            Int         @id @default(autoincrement())
-  actividade_id Int
+  agendamento_id Int
   utilizador_id Int
-  papel         TecnicoTipo // validador (obrigatório) | assistente (opcional)
+  papel         TecnicoTipo // validador (obrigatório) | assistente (obrigatório)
   criado_em     DateTime    @default(now())
   actualizado_em DateTime   @updatedAt
   activo        Boolean     @default(true)
 
-  actividade   Actividade  @relation(fields: [actividade_id], references: [id])
-  utilizador   Utilizador  @relation(fields: [utilizador_id], references: [id])
+  agendamento  Agendamento  @relation(fields: [agendamento_id], references: [id])
+  utilizador   Utilizador   @relation(fields: [utilizador_id], references: [id])
 
-  @@unique([actividade_id, papel])
-  @@map("actividade_tecnico")
+  @@unique([agendamento_id, papel])
+  @@index([utilizador_id])
+  @@map("agendamento_tecnico")
 }
 
 model ActividadeMaterial {
@@ -335,44 +335,24 @@ model ActividadeMaterial {
   @@map("actividade_materiais")
 }
 
-model Aprovacao {
-  id           Int             @id @default(autoincrement())
-  agendamento_id Int?          // NULL em decisões em lote e em decisões ao nível da atividade (conclusão/rejeição)
-  actividade_id Int?           // atividade à qual a decisão se refere (preenchida sempre)
-  aprovador_id Int
-  etapa        AprovacaoEtapa
-  decisao      AprovacaoDecisao
-  comentario   String?
-  decidido_em  DateTime?
-  criado_em    DateTime        @default(now())
-  actualizado_em DateTime      @updatedAt
-  activo       Boolean         @default(true)
+// Decisão por AGENDAMENTO (log imutável): substitui Aprovacao + AprovacaoAgendamento.
+// Um voto individual cria 1 linha; uma decisão em lote cria 1 linha por agendamento
+// (comentário único partilhado). "Deixar pendente" NÃO cria decisão. A primeira
+// decisão de um agendamento da atividade muda Actividade.estado para em_andamento.
+model DecisaoAgendamento {
+  id              Int             @id @default(autoincrement())
+  agendamento_id  Int
+  decisor_id      Int
+  etapa           AprovacaoEtapa
+  decisao         AprovacaoDecisao
+  comentario      String?
+  criado_em       DateTime        @default(now())
 
-  agendamento Agendamento? @relation(fields: [agendamento_id], references: [id])
-  actividade  Actividade?  @relation(fields: [actividade_id], references: [id])
-  aprovador   Utilizador   @relation(fields: [aprovador_id], references: [id])
+  agendamento     Agendamento     @relation(fields: [agendamento_id], references: [id])
+  decisor         Utilizador      @relation(fields: [decisor_id], references: [id])
 
-  aprovacaoAgendamentos AprovacaoAgendamento[]
-
-  @@map("aprovacoes")
-}
-
-// Decisão em LOTE: uma Aprovacao (sem agendamento_id) + N linhas com a decisão de
-// cada agendamento afetado. Comentário único na Aprovacao (como definido no PLANO.md).
-model AprovacaoAgendamento {
-  id             Int             @id @default(autoincrement())
-  aprovacao_id   Int
-  agendamento_id Int
-  decisao        AprovacaoDecisao
-  criado_em      DateTime        @default(now())
-  actualizado_em DateTime        @updatedAt
-  activo         Boolean         @default(true)
-
-  aprovacao   Aprovacao   @relation(fields: [aprovacao_id], references: [id])
-  agendamento Agendamento @relation(fields: [agendamento_id], references: [id])
-
-  @@unique([aprovacao_id, agendamento_id])
-  @@map("aprovacao_agendamentos")
+  @@index([agendamento_id])
+  @@map("decisoes_agendamento")
 }
 
 // Fluxo de aprovação configurável (PLANO.md §3): passos ordenados, cada um com a
@@ -392,6 +372,7 @@ model FluxoAprovacao {
 model Agendamento {
   id                   Int              @id @default(autoincrement())
   actividade_id        Int
+  num_participantes    Int              @default(1)
   hora_inicio          DateTime
   hora_fim             DateTime
   confirmado_professor_em DateTime?
@@ -403,8 +384,9 @@ model Agendamento {
   activo               Boolean          @default(true)
 
   actividade Actividade @relation(fields: [actividade_id], references: [id])
-  aprovacoes Aprovacao[]
-  aprovacaoAgendamentos AprovacaoAgendamento[]
+  decisoes   DecisaoAgendamento[]
+  historico  HistoricoMaterial[]
+  tecnicos   AgendamentoTecnico[]
 
   @@map("agendamentos")
 }

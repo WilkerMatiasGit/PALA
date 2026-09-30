@@ -12,14 +12,16 @@ import { SimplePagination } from '@/components/ui/simple-pagination';
 import { aprovacoesService } from '@/services/aprovacoes.service';
 import { useAuth } from '@/context/AuthContext';
 import { formatDate } from '@/utils/formatDate';
+import { formatEstado } from '@/utils/formatEstado';
 import { PAGE_SIZE } from '@/utils/constants';
-import type { AprovacaoGet } from '@/types/aprovacao.types';
-import { CheckCircle, ChevronRight } from 'lucide-react';
+import type { AprovacaoFilaItem } from '@/types/aprovacao.types';
+import { ACTIVIDADE_ESTADO_LABELS } from '@/services/enums';
+import { CheckCircle, ChevronRight, Clock } from 'lucide-react';
 
 export default function AprovacoesList() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [data, setData] = useState<AprovacaoGet[]>([]);
+  const [data, setData] = useState<AprovacaoFilaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [filters, setFilters] = useState<Record<string, string>>({});
@@ -36,9 +38,9 @@ export default function AprovacoesList() {
     let result = [...data];
     if (filters.actividade) {
       const q = filters.actividade.toLowerCase();
-      result = result.filter((a) => (a.actividade_nome ?? '').toLowerCase().includes(q));
+      result = result.filter((a) => (a.nome ?? '').toLowerCase().includes(q));
     }
-    if (filters.etapa) result = result.filter((a) => a.etapa === filters.etapa);
+    if (filters.estado) result = result.filter((a) => a.estado === filters.estado);
     return result;
   }, [data, filters]);
 
@@ -47,7 +49,15 @@ export default function AprovacoesList() {
 
   const filterFields: FilterField[] = [
     { key: 'actividade', label: 'Actividade', type: 'text', placeholder: 'Pesquisar...' },
-    { key: 'etapa', label: 'Etapa', type: 'select', options: [{ value: 'dlab', label: 'DLab' }, { value: 'supervisor', label: 'Supervisor' }] },
+    {
+      key: 'estado',
+      label: 'Estado',
+      type: 'select',
+      options: [
+        { value: 'pendente', label: ACTIVIDADE_ESTADO_LABELS.pendente },
+        { value: 'em_andamento', label: ACTIVIDADE_ESTADO_LABELS.em_andamento },
+      ],
+    },
   ];
 
   const isAdmin = user?.tipo === 'admin';
@@ -57,10 +67,10 @@ export default function AprovacoesList() {
       ? 'Fila de Aprovação - Supervisor'
       : 'Fila de Aprovação - Coordenador DLab';
   const description = isAdmin
-    ? 'Actividades pendentes (revisão DLab) e aprovadas pelo DLab (revisão Supervisor) que aguardam decisão.'
+    ? 'Agendamentos por decidir, em ambas as etapas (revisão DLab e revisão do Supervisor).'
     : user?.tipo === 'supervisor'
-      ? 'Actividades aprovadas pelo DLab que aguardam a sua validação final.'
-      : 'Actividades pendentes que aguardam a sua validação técnica.';
+      ? 'Agendamentos aprovados pelo DLab que aguardam a sua validação final.'
+      : 'Agendamentos que aguardam a sua validação técnica.';
 
   return (
     <div>
@@ -80,20 +90,32 @@ export default function AprovacoesList() {
             <TableHeader>
               <TableRow>
                 <TableHead>Actividade</TableHead>
-                <TableHead>Etapa</TableHead>
+                <TableHead>Estado</TableHead>
+                <TableHead className="text-right">Agendamentos por decidir</TableHead>
                 <TableHead>Data de submissão</TableHead>
                 <TableHead className="text-right">Ação</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {pageData.map((a) => (
-                <TableRow key={a.id} className="cursor-pointer" onClick={() => navigate(`/aprovacoes/${a.id}`)}>
-                  <TableCell className="font-medium">{a.actividade_nome}</TableCell>
-                  <TableCell><Badge variant="secondary">{a.etapa === 'dlab' ? 'DLab' : 'Supervisor'}</Badge></TableCell>
-                  <TableCell className="text-muted-foreground">{formatDate(a.criado_em)}</TableCell>
-                  <TableCell className="text-right"><ChevronRight className="h-4 w-4 text-muted-foreground" /></TableCell>
-                </TableRow>
-              ))}
+              {pageData.map((a) => {
+                const est = formatEstado(a.estado);
+                return (
+                  <TableRow key={a.id} className="cursor-pointer" onClick={() => navigate(`/aprovacoes/${a.id}`)}>
+                    <TableCell className="font-medium">{a.nome}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={est.className}>{est.label}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="inline-flex items-center gap-1 text-sm font-medium">
+                        <Clock className="h-3 w-3 text-muted-foreground" />
+                        {a.em_espera}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{formatDate(a.criado_em)}</TableCell>
+                    <TableCell className="text-right"><ChevronRight className="h-4 w-4 text-muted-foreground" /></TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         )}
