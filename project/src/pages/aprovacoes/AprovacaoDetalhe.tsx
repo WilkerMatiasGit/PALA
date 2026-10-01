@@ -119,8 +119,6 @@ export default function AprovacaoDetalhe() {
   const votaveis = agendamentos.filter((g) => g.pode_decidir);
   const podeDlab = user?.tipo === 'admin' || user?.tipo === 'coordenador_dlab';
   const podeSup = user?.tipo === 'admin' || user?.tipo === 'supervisor';
-  // Rejeição explícita da atividade só quando nenhuma sessão está aprovada/realizada.
-  const temIntocaveis = agendamentos.some((g) => g.estado === 'aprovado_supervisor' || g.realizado);
   const algumaEtapaSupervisor = votaveis.some((g) => selected.includes(g.id) && g.etapa_alvo === 'supervisor');
   const loteDecisaoEfectiva: AprovacaoDecisao = algumaEtapaSupervisor ? 'rejeitado' : loteDecisao;
 
@@ -640,21 +638,30 @@ export default function AprovacaoDetalhe() {
         </TabsContent>
       </Tabs>
 
-      {!temIntocaveis && votaveis.length > 0 && (
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs text-muted-foreground">
-            {emEspera} de {agendamentos.length} agendamento(s) à espera na sua etapa · {totalPart} participantes
-            no total
-          </p>
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-muted-foreground">
+          {emEspera} de {agendamentos.length} agendamento(s) à espera na sua etapa · {totalPart} participantes
+          no total
+        </p>
+        <div className="flex flex-col items-end gap-1">
           <Button
             variant="destructive"
             onClick={() => setComment({ kind: 'rejeitar-actividade' })}
-            disabled={submitting}
+            disabled={submitting || !detalhe.pode_rejeitar_atividade}
           >
             <Flag className="mr-2 h-4 w-4" /> Rejeitar Atividade
           </Button>
+          {agendamentos.length === 0 ? (
+            <p className="text-xs text-muted-foreground">Esta actividade ainda não tem agendamentos.</p>
+          ) : !detalhe.pode_rejeitar_atividade ? (
+            <p className="text-xs text-muted-foreground">
+              Não é possível rejeitar a actividade neste momento — os agendamentos já avançaram para lá da
+              tua etapa, estão em etapas diferentes, ou a actividade já está concluída/terminada. Rejeite as
+              sessões pendentes individualmente ou pela Decisão em massa.
+            </p>
+          ) : null}
         </div>
-      )}
+      </div>
 
       <ConfirmDialog
         open={confirm?.kind === 'lote-aprovar'}

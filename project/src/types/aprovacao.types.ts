@@ -55,6 +55,8 @@ export interface AprovacaoDetalheGet {
   nome: string;
   tipo: ActividadeTipo;
   estado: ActividadeEstado;
+  /** Rejeição da atividade inteira possível para este utilizador neste momento. */
+  pode_rejeitar_atividade: boolean;
   laboratorio_id: number;
   laboratorio_nome: string;
   responsavel_id: number;

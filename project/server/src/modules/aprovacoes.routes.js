@@ -22,6 +22,25 @@ function etapaDeAgendamento(estado) {
   return null;
 }
 
+// Rejeição da atividade inteira (shutdown). Não depende do papel, apenas do estado
+// das sessões e da permissão de etapa do utilizador:
+//  - bloqueio: alguma sessão realizada, alguma em aprovado_supervisor (topo do fluxo)
+//    ou todas as sessões já rejeitadas;
+//  - habilitação: todas as sessões não-rejeitadas na MESMA etapa e o utilizador
+//    com permissão para decidir nessa etapa (via FluxoAprovacao).
+async function podeRejeitarAtividade(agendamentos, tipo) {
+  if (agendamentos.length === 0) return false;
+  if (agendamentos.some((g) => g.realizado)) return false;
+  if (agendamentos.some((g) => g.estado === 'aprovado_supervisor')) return false;
+  const naoRejeitados = agendamentos.filter((g) => g.estado !== 'rejeitado');
+  if (naoRejeitados.length === 0) return false;
+  const etapas = new Set(naoRejeitados.map((g) => etapaDeAgendamento(g.estado)));
+  if (etapas.size !== 1) return false;
+  const [etapa] = etapas;
+  if (!etapa) return false;
+  return podeVotarEtapa(etapa, tipo);
+}
+
 // Validação comum dos técnicos (validador + assistente) pedidos na aprovação do
 // Supervisor. Ambos são obrigatórios e podem ser a mesma pessoa.
 async function validarTecnicos(tecnicos) {
@@ -130,6 +149,7 @@ fila.get('/:id', async (req, res, next) => {
       nome: act.nome,
       tipo: act.tipo,
       estado: act.estado,
+      pode_rejeitar_atividade: await podeRejeitarAtividade(act.agendamentos, req.user.tipo),
       laboratorio_id: act.laboratorio_id,
       laboratorio_nome: act.laboratorio?.nome ?? '',
       responsavel_id: act.responsavel_id,

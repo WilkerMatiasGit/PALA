@@ -215,13 +215,15 @@ Frontend:
 
 ### 2.8. Detalhe de aprovação (cards → tabs, decisão em massa)
 
-> **Estado:** ✅ (E0 backend + E2/E6 front) — `POST /aprovacoes/lote`; `AprovacaoDetalhe.tsx` com cards Agendamentos → Decisão em massa, modal de técnicos (validador+assistente) ao aprovar no Supervisor, lote só rejeitar no Supervisor (aprovou individual com técnicos), botão «Rejeitar atividade» escondido quando há sessões aprovadas/realizadas. **Aprovar e Deixar pendente (DLab) marcam no card** («Alterar decisão»/«Concluir» persistem); **Rejeitar (qualquer etapa) e Aprovar no Supervisor gravam de imediato no modal** (justificação no modal; fechar sem confirmar = nada feito).
+> **Estado:** ✅ (E0 backend + E2/E6 front) — `POST /aprovacoes/lote`; `AprovacaoDetalhe.tsx` com cards Agendamentos → Decisão em massa, modal de técnicos (validador+assistente) ao aprovar no Supervisor, lote só rejeitar no Supervisor (aprovou individual com técnicos). Botão «Rejeitar atividade» **sempre visível e habilitado só sob regra do servidor** (`GET /aprovacoes/:id.pode_rejeitar_atividade`): bloqueia se houver sessão `realizado`/`aprovado_supervisor` ou todas `rejeitado`; habilita se todas as não-rejeitadas estiverem na mesma etapa e o utilizador puder votar nessa etapa (`FluxoAprovacao`; admin sempre). **Aprovar e Deixar pendente (DLab) marcam no card** («Alterar decisão»/«Concluir» persistem); **Rejeitar (qualquer etapa) e Aprovar no Supervisor gravam de imediato no modal** (justificação no modal; fechar sem confirmar = nada feito).
 > ⚠️ **Substituído por §0.1:** a decisão em lote já **não** cria `AprovacaoAgendamento`; grava uma `DecisaoAgendamento` por agendamento e **não** leva `etapa` (deduzida por agendamento). Não implementar a secção "Aprovacao + ligações" abaixo.
 
 #### Como está agora
 - `AprovacaoDetalhe` (rota `/aprovacoes/:id`) = cards: Dados da Actividade/header, Agendamentos (votação por sessão com técnicos), Decisão em massa.
 - Cada agendamento tem botões Aprovar/Rejeitar/Deixar pendente: **Aprovar e Deixar pendente** marcam no card («Alterar decisão»/«Concluir» persistem; só DLab); **Rejeitar em qualquer etapa** grava de imediato no modal de justificação.
 - Aprovar no Supervisor abre modal obrigatório com `validador_id` + `assistente_id` (mesma pessoa permitida; `tipo='tecnico'`).
+- Comentário **único partilhado pelo lote**: limitação conhecida (os agendamentos de um lote podem ter motivos de rejeição diferentes entre si). Decidido **não mexer** por agora — melhoria futura possível: expandir e personalizar o comentário por agendamento dentro do lote, **colapsado por defeito**; avaliar consoante feedback de uso real.
+- Botão «Rejeitar Atividade» **sempre visível**; estado lido de `GET /aprovacoes/:id.pode_rejeitar_atividade` (calculado no servidor). Usa **uma única label genérica** para os 5 casos de bloqueio (`realizado`, avançou para `aprovado_supervisor`, todas `rejeitado`, etapas mistas, sem permissão na etapa) e uma label própria quando a atividade não tem agendamentos. **Melhoria futura (não implementar agora):** o backend devolver um `motivo_bloqueio` (enum) em vez de só `pode_rejeitar_atividade` (booleano), para o front mostrar uma mensagem específica por caso.
 
 #### O problema
 - Sem tabs, a tela satura com várias actividades; decidir "data a data" é lento.
