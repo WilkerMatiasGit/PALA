@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Check, ChevronsUpDown, Plus } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { apiErrorMessage } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import {
   Popover,
@@ -48,6 +50,7 @@ export function SearchSelect({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [creating, setCreating] = useState(false);
 
   const selected = options.find((o) => o.value === value);
   const queryTrim = query.trim();
@@ -61,13 +64,17 @@ export function SearchSelect({
 
   const handleCreate = async () => {
     if (!queryTrim || !onCreate || exists) return;
+    setCreating(true);
     try {
       await onCreate(queryTrim);
       onValueChange(queryTrim);
       setOpen(false);
       setQuery('');
-    } catch {
-      // erro propagado pelo caller (toast)
+    } catch (err) {
+      // Qualquer falha na criação (409, rede, validação) é comunicada ao utilizador.
+      toast.error(err instanceof Error ? err.message : apiErrorMessage(err));
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -112,7 +119,7 @@ export function SearchSelect({
         </Command>
         {canCreate && queryTrim && !exists && onCreate && (
           <div className="border-t p-2">
-            <Button type="button" variant="outline" size="sm" onClick={handleCreate} className="w-full gap-1">
+            <Button type="button" variant="outline" size="sm" onClick={handleCreate} disabled={creating} className="w-full gap-1">
               <Plus className="h-4 w-4" />
               Criar &quot;{queryTrim}&quot;
             </Button>

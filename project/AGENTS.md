@@ -279,7 +279,7 @@ Aprovações (`/aprovacoes`): acesso A,C,S,CD. `GET /` (fila por agendamento, ag
 
 Calendário: `GET /calendario?laboratorio_id=&mes=&ano=&de=&ate=` (todos; só `aprovado_supervisor`; `de`/`ate` substituem `mes`/`ano` — ✅ E2).
 
-Catálogos e Configuração (`/configuracao` + novos routers — E0, escrita só A): `GET/POST/PUT/DELETE /unidades-laboratoriais` · `GET/POST/PUT/DELETE /categorias-material` · `GET/POST/PUT/DELETE /unidades` (motor de catálogos em `utils/catalogos.js`) · `GET/PUT /configuracao/fluxo` (A,C,S) · `POST /configuracao/fluxo/reset` (A).
+Catálogos e Configuração (`/configuracao` + novos routers — E0, escrita só A): `GET/POST/PUT/DELETE /unidades-laboratoriais` · `GET/POST/PUT/DELETE /categorias-material` · `GET/POST/PUT/DELETE /unidades` (motor de catálogos em `utils/catalogos.js`) · `GET/PUT /configuracao/fluxo` (A,C,S) · `POST /configuracao/fluxo/reset` (A). **Soft delete**: o `POST` reactiva (200) um registo `!activo` com o mesmo nome em vez de colidir com a unicidade; o `DELETE` devolve **409** com mensagem específica quando o registo está em uso por N registos (por catálogo). O fallback `unidadeId()` (`utils/catalogos.js`) também reactiva um nome inactivo (evita P2002).
 
 Relatórios (`/relatorios`): `GET /` · `GET /:id` · `POST /` (A,T) · `GET /:id/pdf` (PDF mínimo) — acesso R: A,T,C,S,CD.
 

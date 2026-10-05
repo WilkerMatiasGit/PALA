@@ -14,12 +14,17 @@ function toCatalogoGet(row, extra = {}) {
   };
 }
 
-function criarRouter({ model, uniqueKey, nomeLabel, usoQuery }) {
+function criarRouter({ model, uniqueKey, nomeLabel, usoQuery, usoNome, usoPlural, usoAlvo }) {
   const r = Router();
   r.use(authRequired);
 
   const KEY = uniqueKey; // ex.: 'laboratorios' | 'materiais' (contagem de uso)
   const NOME = nomeLabel;
+
+  const textoUso = (uso) => `${uso === 1 ? usoNome : usoPlural}`;
+  const mensagemUso = (uso) =>
+    `Não é possível eliminar — está em uso por ${uso} ${textoUso(uso)}. ` +
+    `Reatribui ${uso === 1 ? 'esse' : 'esses'} ${textoUso(uso)} a ${usoAlvo} primeiro.`;
 
   r.get('/', async (req, res, next) => {
     try {
@@ -34,10 +39,22 @@ function criarRouter({ model, uniqueKey, nomeLabel, usoQuery }) {
     try {
       const { nome, descricao } = req.body || {};
       if (!nome) return res.status(400).json({ message: `${NOME} nome é obrigatório` });
-      const dup = await prisma[model].findFirst({ where: { nome: String(nome).trim() } });
-      if (dup) return res.status(409).json({ message: `${NOME} já existe` });
+      const nomeTrim = String(nome).trim();
+      const dup = await prisma[model].findFirst({
+        where: { nome: { equals: nomeTrim, mode: 'insensitive' } },
+      });
+      if (dup) {
+        if (dup.activo) return res.status(409).json({ message: `${NOME} já existe` });
+        // Nome pertence a um registo soft-deleted: reactiva-o (e actualiza os
+        // campos enviados) em vez de colidir com a unicidade.
+        const reactivado = await prisma[model].update({
+          where: { id: dup.id },
+          data: { activo: true, ...(descricao !== undefined ? { descricao } : {}) },
+        });
+        return res.status(200).json(toCatalogoGet(reactivado));
+      }
       const row = await prisma[model].create({
-        data: { nome: String(nome).trim(), ...(descricao !== undefined ? { descricao } : {}) },
+        data: { nome: nomeTrim, ...(descricao !== undefined ? { descricao } : {}) },
       });
       res.status(201).json(toCatalogoGet(row));
     } catch (err) {
@@ -52,7 +69,9 @@ function criarRouter({ model, uniqueKey, nomeLabel, usoQuery }) {
       const { nome, descricao } = req.body || {};
       const data = {};
       if (nome !== undefined) {
-        const dup = await prisma[model].findFirst({ where: { nome: String(nome).trim(), NOT: { id: row.id } } });
+        const dup = await prisma[model].findFirst({
+          where: { nome: { equals: String(nome).trim(), mode: 'insensitive' }, NOT: { id: row.id } },
+        });
         if (dup) return res.status(409).json({ message: `${NOME} já existe` });
         data.nome = String(nome).trim();
       }
@@ -70,7 +89,7 @@ function criarRouter({ model, uniqueKey, nomeLabel, usoQuery }) {
       if (!row) return res.status(404).json({ message: `${NOME} não encontrado` });
       const uso = await prisma[KEY].count({ where: { [usoQuery]: row.id, activo: true } });
       if (uso > 0) {
-        return res.status(409).json({ message: `${NOME} está em uso por ${uso} registo(s)` });
+        return res.status(409).json({ message: mensagemUso(uso) });
       }
       await prisma[model].update({ where: { id: row.id }, data: { activo: false } });
       res.json({ message: `${NOME} removido` });
@@ -87,6 +106,9 @@ export const unidadesLaboratoriaisRouter = criarRouter({
   uniqueKey: 'laboratorio',
   nomeLabel: 'Unidade laboratorial',
   usoQuery: 'unidade_laboratorial_id', // attn: count on Laboratorio uses field name
+  usoNome: 'laboratório',
+  usoPlural: 'laboratórios',
+  usoAlvo: 'outra unidade laboratorial',
 });
 
 export const categoriasMaterialRouter = criarRouter({
@@ -94,6 +116,9 @@ export const categoriasMaterialRouter = criarRouter({
   uniqueKey: 'material',
   nomeLabel: 'Categoria de material',
   usoQuery: 'categoria_id',
+  usoNome: 'material',
+  usoPlural: 'materiais',
+  usoAlvo: 'outra categoria',
 });
 
 export const unidadesRouter = criarRouter({
@@ -101,4 +126,7 @@ export const unidadesRouter = criarRouter({
   uniqueKey: 'material',
   nomeLabel: 'Unidade',
   usoQuery: 'unidade_id',
+  usoNome: 'material',
+  usoPlural: 'materiais',
+  usoAlvo: 'outra unidade',
 });

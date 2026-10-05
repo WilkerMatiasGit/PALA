@@ -42,7 +42,7 @@ partir de `aprovacoes`/`aprovacao_agendamentos` e do histórico de consumo).
 
 ### 2.1. Estrutura e CRUDs (unidade laboratorial, categorias, unidade, enums, SearchSelect)
 
-> **Estado:** ✅ (E0 backend + E1 front) — modelos + CRUD `/unidades-laboratoriais`, `/categorias-material`, `/unidades` + `utils/catalogos.js`; `Laboratorio.unidade_laboratorial_id`, `Material.categoria_id`/`unidade_id`; front: `SearchSelect` (Pesquisa + "Criar na hora") aplicado em `MaterialUpsertModal`/`LaboratorioUpsertModal`, displays migrados para `catalogoLabel(...)`.
+> **Estado:** ✅ (E0 backend + E1 front) — modelos + CRUD `/unidades-laboratoriais`, `/categorias-material`, `/unidades` + `utils/catalogos.js`; `Laboratorio.unidade_laboratorial_id`, `Material.categoria_id`/`unidade_id`; front: `SearchSelect` (Pesquisa + "Criar na hora") aplicado em `MaterialUpsertModal`/`LaboratorioUpsertModal`, displays migrados para `catalogoLabel(...)`. **Correcção (soft delete):** o `POST` dos catálogos reactiva um registo `!activo` com o mesmo nome (200) em vez de colidir; `DELETE` em uso responde 409 com mensagem específica; erros do `SearchSelect`/`catalogos.service.ts` usam `apiErrorMessage`; `unidadeId()` reactiva no fallback (evita P2002).
 
 #### Como está agora
 - `Laboratorio.tipo` é o enum fixo `LaboratorioTipo { quimica, fisica, outro }`; o modal `LaboratorioUpsertModal` e a lista `LaboratoriosList` usam `LABORATORIO_TIPO_OPTIONS` (estáticos em `services/enums.ts`).
