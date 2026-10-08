@@ -40,8 +40,8 @@ export interface ActividadeFullUpsert extends ActividadeUpsert {
     hora_inicio: string;
     hora_fim: string;
     num_participantes: number;
+    materiais?: { material_id: number; quantidade_estimada: number }[];
   }[];
-  materiais?: { material_id: number; quantidade_estimada: number }[];
 }
 
 export interface AulaGet {
@@ -131,9 +131,9 @@ export interface EstagioUpsert {
   data_fim: string;
 }
 
-export interface ActividadeMaterialGet {
+export interface AgendamentoMaterialGet {
   id: number;
-  actividade_id: number;
+  agendamento_id: number;
   material_id: number;
   material_nome: string;
   quantidade_estimada: number;
@@ -141,9 +141,9 @@ export interface ActividadeMaterialGet {
   actualizado_em: string;
 }
 
-export interface ActividadeMaterialUpsert {
+export interface AgendamentoMaterialUpsert {
   id?: number;
-  actividade_id: number;
+  agendamento_id: number;
   material_id: number;
   quantidade_estimada: number;
 }

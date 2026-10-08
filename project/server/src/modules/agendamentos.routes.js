@@ -26,8 +26,8 @@ async function finalizarSeCompleto(tx, agId, utilizadorId) {
     await tx.agendamento.update({ where: { id: agId }, data: { realizado: true } });
     if (ag._count.historico === 0) {
       // Passo 5: baixa automática de stock (uma única vez, quando passa a realizada)
-      const pedidos = await tx.actividadeMaterial.findMany({
-        where: { actividade_id: ag.actividade_id, activo: true },
+      const pedidos = await tx.agendamentoMaterial.findMany({
+        where: { agendamento_id: ag.id, activo: true },
       });
       for (const ped of pedidos) {
         const qtd = -Number(ped.quantidade_estimada || 0);
@@ -36,13 +36,16 @@ async function finalizarSeCompleto(tx, agId, utilizadorId) {
           data: {
             material_id: ped.material_id,
             utilizador_id: utilizadorId,
-            agendamento_id: agId,
+            agendamento_id: ag.id,
             quantidade_movimentada: qtd,
             motivo: 'consumo_actividade',
-            descricao: 'Consumo automático após confirmação de presença',
+            descricao: `Baixa automática por realização da atividade (agendamento #${ag.id})`,
           },
         });
-        await recomputeMaterial(ped.material_id, tx);
+        await tx.material.update({
+          where: { id: ped.material_id },
+          data: { quantidade: { decrement: Math.abs(qtd) } },
+        });
       }
     }
   }

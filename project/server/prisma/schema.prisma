@@ -245,11 +245,11 @@ model Material {
   laboratorio Laboratorio     @relation(fields: [laboratorio_id], references: [id])
   categoria   CategoriaMaterial @relation(fields: [categoria_id], references: [id])
   unidade     Unidade?        @relation(fields: [unidade_id], references: [id])
-  historico   HistoricoMaterial[]
-  atividadeMateriais ActividadeMaterial[]
+    historico   HistoricoMaterial[]
+    agendamentoMateriais AgendamentoMaterial[]
 
-  @@map("materiais")
-}
+    @@map("materiais")
+  }
 
 model HistoricoMaterial {
   id                   Int              @id @default(autoincrement())
@@ -289,11 +289,10 @@ model Actividade {
   responsavel          Utilizador     @relation("ActividadeResponsavel", fields: [responsavel_id], references: [id])
   laboratorio          Laboratorio    @relation(fields: [laboratorio_id], references: [id])
   agendamentos       Agendamento[]
-  atividadeMateriais ActividadeMaterial[]
-  aula               Aula?
-  visita             Visita?
-  projecto           Projecto?
-  estagio            Estagio?
+    aula               Aula?
+    visita             Visita?
+    projecto           Projecto?
+    estagio            Estagio?
 
   @@map("actividades")
 }
@@ -319,20 +318,20 @@ model AgendamentoTecnico {
   @@map("agendamento_tecnico")
 }
 
-model ActividadeMaterial {
-  id                Int      @id @default(autoincrement())
-  actividade_id     Int
-  material_id       Int
+  model AgendamentoMaterial {
+  id                  Int      @id @default(autoincrement())
+  agendamento_id      Int
+  material_id         Int
   quantidade_estimada Int
-  criado_em         DateTime @default(now())
-  actualizado_em    DateTime @updatedAt
-  activo            Boolean  @default(true)
+  criado_em           DateTime @default(now())
+  actualizado_em      DateTime @updatedAt
+  activo              Boolean  @default(true)
 
-  actividade Actividade @relation(fields: [actividade_id], references: [id])
-  material   Material   @relation(fields: [material_id], references: [id])
+  agendamento Agendamento @relation(fields: [agendamento_id], references: [id])
+  material    Material    @relation(fields: [material_id], references: [id])
 
-  @@unique([actividade_id, material_id])
-  @@map("actividade_materiais")
+  @@unique([agendamento_id, material_id])
+  @@map("agendamento_materiais")
 }
 
 // Decisão por AGENDAMENTO (log imutável): substitui Aprovacao + AprovacaoAgendamento.
@@ -383,10 +382,11 @@ model Agendamento {
   actualizado_em       DateTime         @updatedAt
   activo               Boolean          @default(true)
 
-  actividade Actividade @relation(fields: [actividade_id], references: [id])
+    actividade Actividade @relation(fields: [actividade_id], references: [id])
   decisoes   DecisaoAgendamento[]
   historico  HistoricoMaterial[]
   tecnicos   AgendamentoTecnico[]
+  materiais  AgendamentoMaterial[]
 
   @@map("agendamentos")
 }

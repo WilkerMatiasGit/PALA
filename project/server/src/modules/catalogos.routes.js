@@ -47,9 +47,10 @@ function criarRouter({ model, uniqueKey, nomeLabel, usoQuery, usoNome, usoPlural
         if (dup.activo) return res.status(409).json({ message: `${NOME} já existe` });
         // Nome pertence a um registo soft-deleted: reactiva-o (e actualiza os
         // campos enviados) em vez de colidir com a unicidade.
+        // Ao reactivar, o nome/descrição submetidos no momento da reactivação substituem os valores antigos.
         const reactivado = await prisma[model].update({
           where: { id: dup.id },
-          data: { activo: true, ...(descricao !== undefined ? { descricao } : {}) },
+          data: { nome: nomeTrim, activo: true, ...(descricao !== undefined ? { descricao } : {}) },
         });
         return res.status(200).json(toCatalogoGet(reactivado));
       }

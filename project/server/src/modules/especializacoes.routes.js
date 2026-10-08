@@ -6,7 +6,6 @@ import {
   toVisitaGet,
   toProjectoGet,
   toEstagioGet,
-  toActividadeMaterialGet,
 } from '../utils/dto.js';
 
 const ACT_ROLES = ['admin', 'professor', 'coordenador_dlab', 'supervisor', 'chefe_departamento'];
@@ -187,59 +186,3 @@ estagios.put('/:id/documento', rbac(...ACT_ROLES), async (req, res, next) => {
 });
 
 export const estagiosRouter = estagios;
-
-// ---- Actividade-Materiais ----
-const atividadeMateriais = Router();
-atividadeMateriais.use(authRequired, rbac(...ACT_ROLES));
-
-// POST /actividade-materiais
-atividadeMateriais.post('/', async (req, res, next) => {
-  try {
-    const { actividade_id, material_id, quantidade_estimada } = req.body || {};
-    if (!actividade_id || !material_id || quantidade_estimada == null) {
-      return res.status(400).json({ message: 'actividade_id, material_id e quantidade_estimada são obrigatórios' });
-    }
-    const actv = await prisma.actividade.findUnique({ where: { id: Number(actividade_id) } });
-    if (!actv || !actv.activo) return res.status(404).json({ message: 'Atividade não encontrada' });
-    const mat = await prisma.material.findUnique({
-      where: { id: Number(material_id) },
-      include: { unidade: true },
-    });
-    if (!mat || !mat.activo) return res.status(404).json({ message: 'Material não encontrado' });
-    if (mat.laboratorio_id !== actv.laboratorio_id) {
-      return res.status(400).json({ message: `O material '${mat.nome}' não pertence ao laboratório da atividade` });
-    }
-    const qtd = Number(quantidade_estimada) || 0;
-    if (qtd < 1) return res.status(400).json({ message: 'quantidade_estimada deve ser maior que zero' });
-    if (qtd > mat.quantidade) {
-      return res.status(400).json({ message: `Stock insuficiente para '${mat.nome}' (disponível: ${mat.quantidade} ${mat.unidade?.nome ?? ''})` });
-    }
-    const result = await prisma.actividadeMaterial.upsert({
-      where: { actividade_id_material_id: { actividade_id: Number(actividade_id), material_id: Number(material_id) } },
-      update: { quantidade_estimada: Number(quantidade_estimada) },
-      create: {
-        actividade_id: Number(actividade_id),
-        material_id: Number(material_id),
-        quantidade_estimada: Number(quantidade_estimada),
-      },
-      include: { material: true },
-    });
-    res.status(201).json(toActividadeMaterialGet(result));
-  } catch (err) {
-    next(err);
-  }
-});
-
-// DELETE /actividade-materiais/:id
-atividadeMateriais.delete('/:id', async (req, res, next) => {
-  try {
-    const m = await prisma.actividadeMaterial.findUnique({ where: { id: Number(req.params.id) } });
-    if (!m) return res.status(404).json({ message: 'Pedido não encontrado' });
-    await prisma.actividadeMaterial.update({ where: { id: m.id }, data: { activo: false } });
-    res.json({ message: 'Pedido removido' });
-  } catch (err) {
-    next(err);
-  }
-});
-
-export const atividadeMateriaisRouter = atividadeMateriais;

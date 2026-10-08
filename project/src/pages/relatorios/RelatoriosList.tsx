@@ -75,7 +75,7 @@ export default function RelatoriosList() {
               <TableRow>
                 <TableHead>Laboratório</TableHead>
                 <TableHead>Mês/Ano</TableHead>
-                <TableHead>Criado por</TableHead>
+                <TableHead className="hidden">Criado por</TableHead>
                 <TableHead>Data</TableHead>
                 <TableHead className="text-right">Ação</TableHead>
               </TableRow>
@@ -85,7 +85,7 @@ export default function RelatoriosList() {
                 <TableRow key={r.id} className="cursor-pointer" onClick={() => navigate(`/relatorios/${r.id}`)}>
                   <TableCell className="font-medium">{r.laboratorio_nome}</TableCell>
                   <TableCell>{monthLabel(r.mes, r.ano)}</TableCell>
-                  <TableCell className="text-muted-foreground">{r.criado_por_nome}</TableCell>
+                  <TableCell className="hidden text-muted-foreground">{r.criado_por_nome}</TableCell>
                   <TableCell className="text-muted-foreground">{formatDate(r.criado_em)}</TableCell>
                   <TableCell className="text-right"><ChevronRight className="h-4 w-4 text-muted-foreground" /></TableCell>
                 </TableRow>

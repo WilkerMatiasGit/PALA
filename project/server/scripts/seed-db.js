@@ -24,7 +24,7 @@ async function run() {
   console.log('[seed] a limpar base...');
   await prisma.decisaoAgendamento.deleteMany();
   await prisma.historicoMaterial.deleteMany();
-  await prisma.actividadeMaterial.deleteMany();
+  await prisma.agendamentoMaterial.deleteMany();
   await prisma.agendamentoTecnico.deleteMany();
   await prisma.agendamento.deleteMany();
   await prisma.aula.deleteMany();
@@ -216,8 +216,8 @@ async function run() {
     ],
   });
 
-  // ---- Técnicos por agendamento / Materiais da atividade ----
-  console.log('[seed] agendamentoTecnicos / atividadeMateriais...');
+  // ---- Técnicos por agendamento / Materiais por agendamento ----
+  console.log('[seed] agendamentoTecnicos / agendamentoMateriais...');
   await prisma.agendamentoTecnico.createMany({
     data: [
       { id: 1, agendamento_id: 1, utilizador_id: 2, papel: 'validador', criado_em: D('2026-05-29T10:00:00Z') },
@@ -228,10 +228,10 @@ async function run() {
       { id: 6, agendamento_id: 3, utilizador_id: 2, papel: 'assistente', criado_em: D('2026-05-29T10:00:00Z') },
     ],
   });
-  await prisma.actividadeMaterial.createMany({
+  await prisma.agendamentoMaterial.createMany({
     data: [
-      { id: 1, actividade_id: 1, material_id: 1, quantidade_estimada: 200, criado_em: D('2026-05-20T10:00:00Z') },
-      { id: 2, actividade_id: 1, material_id: 2, quantidade_estimada: 10, criado_em: D('2026-05-20T10:00:00Z') },
+      { id: 1, agendamento_id: 1, material_id: 1, quantidade_estimada: 200, criado_em: D('2026-05-20T10:00:00Z') },
+      { id: 2, agendamento_id: 1, material_id: 2, quantidade_estimada: 10, criado_em: D('2026-05-20T10:00:00Z') },
     ],
   });
 

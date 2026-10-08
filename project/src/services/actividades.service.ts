@@ -11,8 +11,7 @@ import type {
   ProjectoUpsert,
   EstagioGet,
   EstagioUpsert,
-  ActividadeMaterialGet,
-  ActividadeMaterialUpsert,
+  AgendamentoMaterialGet,
 } from '@/types/actividade.types';
 
 export interface ActividadeListFilters {
@@ -151,23 +150,8 @@ export const actividadesService = {
   },
 
   // ---- Materiais solicitados na atividade ----
-  async listMateriais(actividadeId: number): Promise<ActividadeMaterialGet[]> {
-    const { data } = await api.get<ActividadeMaterialGet[]>(`/actividades/${actividadeId}/materiais`);
+  async listMateriais(actividadeId: number): Promise<AgendamentoMaterialGet[]> {
+    const { data } = await api.get<AgendamentoMaterialGet[]>(`/actividades/${actividadeId}/materiais`);
     return data;
-  },
-  async addMaterial(data: ActividadeMaterialUpsert): Promise<ActividadeMaterialGet> {
-    try {
-      const { data: result } = await api.post<ActividadeMaterialGet>('/actividade-materiais', data);
-      return result;
-    } catch (err) {
-      throw new Error(apiErrorMessage(err));
-    }
-  },
-  async removeMaterial(id: number): Promise<void> {
-    try {
-      await api.delete(`/actividade-materiais/${id}`);
-    } catch (err) {
-      throw new Error(apiErrorMessage(err));
-    }
   },
 };

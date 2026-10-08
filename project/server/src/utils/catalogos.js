@@ -30,7 +30,7 @@ export async function unidadeId(nome) {
   });
   if (existente) {
     if (!existente.activo) {
-      await prisma.unidade.update({ where: { id: existente.id }, data: { activo: true } });
+      await prisma.unidade.update({ where: { id: existente.id }, data: { activo: true, nome: n } });
     }
     return existente.id;
   }

@@ -17,7 +17,7 @@ import { apiErrorMessage } from '@/services/api';
 import { formatEstado, formatTipo, formatDecisao, formatAgendamentoEstado } from '@/utils/formatEstado';
 import { formatDate, formatDateTime } from '@/utils/formatDate';
 import { useAuth } from '@/context/AuthContext';
-import type { ActividadeGet, AulaGet, VisitaGet, ProjectoGet, EstagioGet, ActividadeMaterialGet } from '@/types/actividade.types';
+import type { ActividadeGet, AulaGet, VisitaGet, ProjectoGet, EstagioGet, AgendamentoMaterialGet } from '@/types/actividade.types';
 import type { AgendamentoGet } from '@/types/agendamento.types';
 import type { DecisaoGet } from '@/types/aprovacao.types';
 import { CheckCircle2, Circle, FileText, Upload, UserCheck, Package, Clock, Users } from 'lucide-react';
@@ -31,7 +31,7 @@ export default function ActividadeDetalhe() {
   const [visita, setVisita] = useState<VisitaGet | null>(null);
   const [projecto, setProjecto] = useState<ProjectoGet | null>(null);
   const [estagio, setEstagio] = useState<EstagioGet | null>(null);
-  const [materiais, setMateriais] = useState<ActividadeMaterialGet[]>([]);
+  const [materiais, setMateriais] = useState<AgendamentoMaterialGet[]>([]);
   const [agendamentos, setAgendamentos] = useState<AgendamentoGet[]>([]);
   const [decisoes, setDecisoes] = useState<DecisaoGet[]>([]);
   const [loading, setLoading] = useState(true);
@@ -153,7 +153,7 @@ export default function ActividadeDetalhe() {
             <CardHeader><CardTitle className="text-base">Informação Geral</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm">
               <div className="flex justify-between"><span className="text-muted-foreground">Laboratório</span><span className="font-medium">{actividade.laboratorio_nome}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Criado por</span><span className="font-medium">{actividade.criado_por_nome}</span></div>
+              {/* criado por ocultado conforme pedido */}
               <div className="flex justify-between"><span className="text-muted-foreground">Responsável</span><span className="font-medium">{actividade.responsavel_nome}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Agendamentos</span><span className="font-medium">{agendamentos.length}</span></div>
               {actividade.observacoes && <Separator />}

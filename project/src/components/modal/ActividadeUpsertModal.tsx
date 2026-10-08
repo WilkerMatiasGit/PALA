@@ -41,6 +41,7 @@ type AgendamentoBloc = {
   hora_inicio: string;
   hora_fim: string;
   num_participantes: string;
+  materiais: MaterialReq[];
 };
 type MaterialReq = { material_id: number; quantidade_estimada: number };
 
@@ -49,6 +50,7 @@ const blocoVazio = (): AgendamentoBloc => ({
   hora_inicio: '',
   hora_fim: '',
   num_participantes: '1',
+  materiais: [],
 });
 
 const toISODate = (d: Date): string => {
@@ -112,11 +114,8 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
   const [dataFim, setDataFim] = useState('');
   const [estudanteId, setEstudanteId] = useState('');
 
-  // Step 3: agendamentos (cada sessão tem o seu próprio nº de participantes)
+  // Step 3: agendamentos (cada sessão tem o seu próprio nº de participantes e materiais)
   const [agendamentos, setAgendamentos] = useState<AgendamentoBloc[]>([blocoVazio()]);
-
-  // Step 4: materiais
-  const [materialReqs, setMaterialReqs] = useState<MaterialReq[]>([]);
 
   useEffect(() => {
     // Cada carregamento é independente: se um falhar (ex: /user é só admin),
@@ -145,7 +144,6 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
     setNomeVisitante(''); setInstituicao(''); setTelefone(''); setEmailVisitante('');
     setTitulo(''); setDescricao(''); setDataInicio(''); setDataFim(''); setEstudanteId('');
     setAgendamentos([blocoVazio()]);
-    setMaterialReqs([]);
   };
 
   const handleOpenChange = (v: boolean) => {
@@ -156,8 +154,11 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
         setTipo(actividade.tipo);
         setObservacoes(actividade.observacoes);
         setResponsavelId(String(actividade.responsavel_id));
-        // O PUT /:id/full substitui os agendamentos — é preciso carregar os atuais.
-        agendamentosService.listByActividade(actividade.id).then((ags) => {
+        // O PUT /:id/full substitui os agendamentos — é preciso carregar os atuais e os seus materiais.
+        Promise.all([
+          agendamentosService.listByActividade(actividade.id),
+          actividadesService.listMateriais(actividade.id).catch(() => []),
+        ]).then(([ags, mats]) => {
           if (ags.length === 0) return;
           setAgendamentos(
             ags.map((g) => {
@@ -168,6 +169,9 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
                 hora_inicio: `${String(inicio.getHours()).padStart(2, '0')}:${String(inicio.getMinutes()).padStart(2, '0')}`,
                 hora_fim: `${String(fim.getHours()).padStart(2, '0')}:${String(fim.getMinutes()).padStart(2, '0')}`,
                 num_participantes: String(g.num_participantes ?? 1),
+                materiais: mats
+                  .filter((m) => m.agendamento_id === g.id)
+                  .map((m) => ({ material_id: m.material_id, quantidade_estimada: m.quantidade_estimada })),
               };
             })
           );
@@ -251,6 +255,15 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
   };
 
   const handleSubmit = async () => {
+    for (const a of agendamentos) {
+      if (!a.data || !a.hora_inicio || !a.hora_fim) continue;
+      for (const m of a.materiais) {
+        if (!m.material_id || m.quantidade_estimada < 1) {
+          toast.error('Escolha o material e uma quantidade (mínimo 1) em cada sessão');
+          return;
+        }
+      }
+    }
     setSaving(true);
     try {
       const actData: ActividadeUpsert = {
@@ -279,8 +292,10 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
             hora_inicio: `${a.data}T${a.hora_inicio}`,
             hora_fim: `${a.data}T${a.hora_fim}`,
             num_participantes: Number(a.num_participantes),
+            materiais: a.materiais
+              .filter((m) => m.material_id > 0 && m.quantidade_estimada > 0)
+              .map((m) => ({ material_id: m.material_id, quantidade_estimada: m.quantidade_estimada })),
           })),
-        materiais: materialReqs.map((m) => ({ material_id: m.material_id, quantidade_estimada: m.quantidade_estimada })),
       };
 
       // Envio único (atómico no backend): atividade + detalhes + agendamentos + materiais
@@ -529,7 +544,7 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
           </div>
         )}
 
-        {/* Step 4: Materiais */}
+        {/* Step 4: Materiais (por sessão) */}
         {step === 4 && (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">Selecione os materiais do laboratório e a quantidade estimada por sessão (opcional).</p>
@@ -538,34 +553,48 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
                 <ClipboardList className="h-10 w-10 text-muted-foreground" />
                 <p className="mt-2 text-sm text-muted-foreground">Selecione um laboratório no passo 1 para ver os materiais disponíveis.</p>
               </div>
+            ) : agendamentos.filter((a) => a.data && a.hora_inicio && a.hora_fim).length === 0 ? (
+              <p className="text-sm text-muted-foreground">Adicione sessões no passo anterior para lhes associar materiais.</p>
             ) : (
-              <>
-                {materialReqs.map((mr, i) => (
-                  <div key={i} className="flex items-end gap-2">
-                    <div className="flex-1 space-y-1">
-                      <Label className="text-xs">Material</Label>
-                      <Select value={String(mr.material_id)} onValueChange={(v) => {
-                        const copy = [...materialReqs]; copy[i].material_id = Number(v); setMaterialReqs(copy);
+              agendamentos.map((ag, i) => {
+                if (!ag.data || !ag.hora_inicio || !ag.hora_fim) return null;
+                return (
+                  <Card key={i}>
+                    <CardContent className="space-y-3 pt-4">
+                      <Badge variant="secondary">{ag.data} · {ag.hora_inicio}–{ag.hora_fim}</Badge>
+                      {ag.materiais.map((mr, j) => (
+                        <div key={j} className="flex items-end gap-2">
+                          <div className="flex-1 space-y-1">
+                            <Label className="text-xs">Material</Label>
+                            <Select value={String(mr.material_id)} onValueChange={(v) => {
+                              const copy = [...agendamentos]; copy[i].materiais[j].material_id = Number(v); setAgendamentos(copy);
+                            }}>
+                              <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                              <SelectContent>{materiais.map((m) => <SelectItem key={m.id} value={String(m.id)}>{m.nome} ({m.quantidade} {m.unidade})</SelectItem>)}</SelectContent>
+                            </Select>
+                          </div>
+                          <div className="w-24 space-y-1">
+                            <Label className="text-xs">Qtd. estimada</Label>
+                            <NumberInput value={String(mr.quantidade_estimada ?? '')} onValueChange={(v) => {
+                              const copy = [...agendamentos]; copy[i].materiais[j].quantidade_estimada = v === '' ? 0 : Number(v); setAgendamentos(copy);
+                            }} />
+                          </div>
+                          <Button variant="ghost" size="icon" onClick={() => {
+                            const copy = [...agendamentos]; copy[i].materiais = copy[i].materiais.filter((_, idx) => idx !== j); setAgendamentos(copy);
+                          }}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      ))}
+                      <Button variant="outline" size="sm" onClick={() => {
+                        const copy = [...agendamentos]; copy[i].materiais = [...copy[i].materiais, { material_id: 0, quantidade_estimada: 1 }]; setAgendamentos(copy);
                       }}>
-                        <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
-                        <SelectContent>{materiais.map((m) => <SelectItem key={m.id} value={String(m.id)}>{m.nome} ({m.quantidade} {m.unidade})</SelectItem>)}</SelectContent>
-                      </Select>
-                    </div>
-                    <div className="w-24 space-y-1">
-                      <Label className="text-xs">Qtd. estimada</Label>
-                      <NumberInput value={String(mr.quantidade_estimada ?? '')} onValueChange={(v) => {
-                        const copy = [...materialReqs]; copy[i].quantidade_estimada = v === '' ? 0 : Number(v); setMaterialReqs(copy);
-                      }} />
-                    </div>
-                    <Button variant="ghost" size="icon" onClick={() => setMaterialReqs(materialReqs.filter((_, idx) => idx !== i))}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                ))}
-                <Button variant="outline" size="sm" onClick={() => setMaterialReqs([...materialReqs, { material_id: 0, quantidade_estimada: 1 }])}>
-                  <Plus className="mr-2 h-4 w-4" /> Adicionar material
-                </Button>
-              </>
+                        <Plus className="mr-2 h-4 w-4" /> Adicionar material
+                      </Button>
+                    </CardContent>
+                  </Card>
+                );
+              })
             )}
           </div>
         )}

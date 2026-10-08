@@ -7,7 +7,7 @@ import {
   toVisitaGet,
   toProjectoGet,
   toEstagioGet,
-  toActividadeMaterialGet,
+  toAgendamentoMaterialGet,
   toAgendamentoGet,
 } from '../utils/dto.js';
 
@@ -210,19 +210,26 @@ async function validarAgendamentos(labId, ags, excludeActId) {
   }
 }
 
-// Valida os pedidos de materiais: devem pertencer ao laboratório e respeitar o stock disponível (RF17)
+// Aplana os materiais de todos os agendamentos (cada agendamento tem a sua lista)
+function aplanarMateriais(ags) {
+  return ags.flatMap((g) => (g.materiais || []).filter((r) => r && r.material_id != null));
+}
+
+// Agrega a quantidade pedida por material em toda a submissão e valida lab/stock (RF17)
 async function validarMateriais(labId, mats) {
+  const totais = new Map();
   for (const r of mats) {
-    const m = await prisma.material.findUnique({
-      where: { id: Number(r.material_id) },
-      include: { unidade: true },
-    });
+    const qtd = Number(r.quantidade_estimada) || 0;
+    if (qtd < 1) throw HTTP(400, 'A quantidade estimada de cada material deve ser maior que zero');
+    const id = Number(r.material_id);
+    totais.set(id, (totais.get(id) || 0) + qtd);
+  }
+  for (const [materialId, qtd] of totais) {
+    const m = await prisma.material.findUnique({ where: { id: materialId }, include: { unidade: true } });
     if (!m || !m.activo) throw HTTP(404, 'Material não encontrado');
     if (m.laboratorio_id !== Number(labId)) {
       throw HTTP(400, `O material '${m.nome}' não pertence ao laboratório selecionado`);
     }
-    const qtd = Number(r.quantidade_estimada) || 0;
-    if (qtd < 1) throw HTTP(400, `A quantidade estimada do material '${m.nome}' deve ser maior que zero`);
     if (qtd > m.quantidade) {
       throw HTTP(400, `Stock insuficiente para '${m.nome}' (disponível: ${m.quantidade} ${m.unidade?.nome ?? ''})`);
     }
@@ -249,7 +256,7 @@ async function crearAgendamentos(tx, actividadId, ags) {
     if (!Number.isInteger(participantes) || participantes < 1) {
       throw HTTP(400, 'Cada agendamento precisa de num_participantes maior que zero');
     }
-    await tx.agendamento.create({
+const ag = await tx.agendamento.create({
       data: {
         actividade_id: actividadId,
         num_participantes: participantes,
@@ -257,21 +264,28 @@ async function crearAgendamentos(tx, actividadId, ags) {
         hora_fim: new Date(g.hora_fim),
       },
     });
-  }
-}
-
-async function crearMateriais(tx, actividadeId, mats) {
-  for (const r of mats) {
-    await tx.actividadeMaterial.create({
-      data: { actividade_id: actividadeId, material_id: Number(r.material_id), quantidade_estimada: Number(r.quantidade_estimada) },
-    });
+    const porMaterial = new Map();
+    for (const r of g.materiais || []) {
+      if (!r || r.material_id == null) continue;
+      const id = Number(r.material_id);
+      porMaterial.set(id, (porMaterial.get(id) || 0) + (Number(r.quantidade_estimada) || 0));
+    }
+    if (porMaterial.size) {
+      await tx.agendamentoMaterial.createMany({
+        data: [...porMaterial].map(([material_id, quantidade_estimada]) => ({
+          agendamento_id: ag.id,
+          material_id,
+          quantidade_estimada,
+        })),
+      });
+    }
   }
 }
 
 // POST /actividades/full — criação atómica (tudo ou nada)
 router.post('/full', rbac(...ACT_ROLES), async (req, res, next) => {
   try {
-    const { nome, responsavel_id, laboratorio_id, observacoes, tipo, detalhes, agendamentos, materiais } = req.body || {};
+    const { nome, responsavel_id, laboratorio_id, observacoes, tipo, detalhes, agendamentos } = req.body || {};
     if (!nome || !laboratorio_id || !tipo) {
       return res.status(400).json({ message: 'nome, laboratorio_id e tipo são obrigatórios' });
     }
@@ -283,7 +297,7 @@ router.post('/full', rbac(...ACT_ROLES), async (req, res, next) => {
 
     const respId = await resolverResponsavel(req, { responsavel_id }, tipo);
     const ags = (agendamentos || []).filter((g) => g && g.hora_inicio && g.hora_fim);
-    const mats = (materiais || []).filter((r) => r && r.material_id != null);
+    const mats = aplanarMateriais(ags);
 
     const spe = montarDetalhes(tipo, detalhes);
     if (!spe) return res.status(400).json({ message: 'Faltam detalhes obrigatórios para o tipo selecionado' });
@@ -305,7 +319,6 @@ router.post('/full', rbac(...ACT_ROLES), async (req, res, next) => {
       });
       await criarEspecialidade(tx, tipo, act.id, spe);
       await crearAgendamentos(tx, act.id, ags);
-      await crearMateriais(tx, act.id, mats);
       return tx.actividade.findUnique({ where: { id: act.id }, include: actInclude });
     });
     res.status(201).json(toActividadeGet(novo));
@@ -321,7 +334,7 @@ router.put('/:id/full', rbac(...ACT_ROLES), async (req, res, next) => {
     const act = await prisma.actividade.findUnique({ where: { id: Number(req.params.id) } });
     if (!act || !act.activo) return res.status(404).json({ message: 'Atividade não encontrada' });
 
-    const { nome, responsavel_id, laboratorio_id, observacoes, tipo, detalhes, agendamentos, materiais } = req.body || {};
+    const { nome, responsavel_id, laboratorio_id, observacoes, tipo, detalhes, agendamentos } = req.body || {};
     const novoTipo = tipo || act.tipo;
     const novoLabId = laboratorio_id != null ? Number(laboratorio_id) : act.laboratorio_id;
     if (!['aula', 'visita', 'projecto', 'estagio'].includes(novoTipo)) {
@@ -340,7 +353,7 @@ router.put('/:id/full', rbac(...ACT_ROLES), async (req, res, next) => {
     }
 
     const ags = (agendamentos || []).filter((g) => g && g.hora_inicio && g.hora_fim);
-    const mats = (materiais || []).filter((r) => r && r.material_id != null);
+    const mats = aplanarMateriais(ags);
 
     await validarAgendamentos(novoLabId, ags, act.id);
     await validarMateriais(novoLabId, mats);
@@ -356,16 +369,8 @@ router.put('/:id/full', rbac(...ACT_ROLES), async (req, res, next) => {
       const up = await tx.actividade.update({ where: { id: act.id }, data, include: actInclude });
       const spe = montarDetalhes(novoTipo, detalhes);
       if (spe) await actualizarEspecialidade(tx, novoTipo, act.id, spe);
-      await tx.agendamento.updateMany({ where: { actividade_id: act.id, activo: true }, data: { activo: false } });
+await tx.agendamento.updateMany({ where: { actividade_id: act.id, activo: true }, data: { activo: false } });
       await crearAgendamentos(tx, act.id, ags);
-      await tx.actividadeMaterial.updateMany({ where: { actividade_id: act.id, activo: true }, data: { activo: false } });
-      for (const r of mats) {
-        await tx.actividadeMaterial.upsert({
-          where: { actividade_id_material_id: { actividade_id: act.id, material_id: Number(r.material_id) } },
-          update: { quantidade_estimada: Number(r.quantidade_estimada), activo: true },
-          create: { actividade_id: act.id, material_id: Number(r.material_id), quantidade_estimada: Number(r.quantidade_estimada) },
-        });
-      }
       return up;
     });
     res.json(toActividadeGet(atualizado));
@@ -436,12 +441,21 @@ router.get('/:id/estagio', async (req, res, next) => {
 // GET /actividades/:id/materiais
 router.get('/:id/materiais', async (req, res, next) => {
   try {
-    const rows = await prisma.actividadeMaterial.findMany({
-      where: { actividade_id: Number(req.params.id), activo: true },
-      include: { material: true },
-      orderBy: { id: 'asc' },
+    const actId = Number(req.params.id);
+    const ags = await prisma.agendamento.findMany({
+      where: { actividade_id: actId, activo: true },
+      select: { id: true },
     });
-    res.json(rows.map(toActividadeMaterialGet));
+    const agIds = ags.map(a => a.id);
+    let rows = [];
+    if (agIds.length) {
+      rows = await prisma.agendamentoMaterial.findMany({
+        where: { agendamento_id: { in: agIds }, activo: true },
+        include: { material: true },
+        orderBy: { id: 'asc' },
+      });
+    }
+    res.json(rows.map(toAgendamentoMaterialGet));
   } catch (err) {
     next(err);
   }

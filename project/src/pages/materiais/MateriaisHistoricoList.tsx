@@ -97,7 +97,9 @@ export default function MateriaisHistoricoList() {
                   </TableCell>
                   <TableCell>{MOVIMENTACAO_MOTIVO_LABELS[h.motivo]}</TableCell>
                   <TableCell className="text-muted-foreground">
-                    {h.agendamento_nome ?? '—'}
+                    {h.motivo === 'consumo_actividade'
+                      ? `Automático: ${h.agendamento_nome ?? '—'}`
+                      : `Manual: ${h.descricao || '—'}`}
                   </TableCell>
                   <TableCell className="text-muted-foreground">{formatDate(h.criado_em)}</TableCell>
                 </TableRow>

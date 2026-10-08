@@ -28,7 +28,7 @@ import { utilizadoresService } from '@/services/utilizadores.service';
 import { useAuth } from '@/context/AuthContext';
 import { formatEstado, formatTipo, formatAgendamentoEstado, formatDecisao, formatEtapa } from '@/utils/formatEstado';
 import { formatDate, formatDateTime } from '@/utils/formatDate';
-import type { ActividadeMaterialGet } from '@/types/actividade.types';
+import type { AgendamentoMaterialGet } from '@/types/actividade.types';
 import type {
   AprovacaoAgendamentoDetalhe,
   AprovacaoDetalheGet,
@@ -64,7 +64,7 @@ export default function AprovacaoDetalhe() {
   const { user } = useAuth();
 
   const [detalhe, setDetalhe] = useState<AprovacaoDetalheGet | null>(null);
-  const [materiais, setMateriais] = useState<ActividadeMaterialGet[]>([]);
+  const [materiais, setMateriais] = useState<AgendamentoMaterialGet[]>([]);
   const [decisoes, setDecisoes] = useState<DecisaoGet[]>([]);
   const [tecnicosDisponiveis, setTecnicosDisponiveis] = useState<UtilizadorGet[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -314,8 +314,7 @@ export default function AprovacaoDetalhe() {
               <p className="font-medium">{detalhe.laboratorio_nome}</p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Criado por</p>
-              <p className="font-medium">{detalhe.criado_por_nome}</p>
+              {/* criado por ocultado conforme pedido */}
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Responsável</p>

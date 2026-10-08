@@ -238,16 +238,17 @@ export function toAgendamentoTecnicoGet(t) {
   };
 }
 
-// Recebe ActividadeMaterial com include { material, atividade }
-export function toActividadeMaterialGet(am) {
+// Recebe AgendamentoMaterial com include { material, agendamento }
+export function toAgendamentoMaterialGet(am) {
   return {
     id: am.id,
-    actividade_id: am.actividade_id,
+    agendamento_id: am.agendamento_id,
     material_id: am.material_id,
-    material_nome: am.material?.nome ?? '',
     quantidade_estimada: am.quantidade_estimada,
     criado_em: am.criado_em,
     actualizado_em: am.actualizado_em,
+    activo: am.activo,
+    material_nome: am.material?.nome ?? '',
   };
 }
 
