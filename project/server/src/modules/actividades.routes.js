@@ -56,7 +56,7 @@ router.get('/', async (req, res, next) => {
     } else if (req.user.tipo === 'tecnico') {
       where.agendamentos = { some: { activo: true, tecnicos: { some: { activo: true, utilizador_id: req.user.id } } } };
     }
-    const rows = await prisma.actividade.findMany({ where, include: actInclude, orderBy: { id: 'asc' } });
+    const rows = await prisma.actividade.findMany({ where, include: actInclude, orderBy: { criado_em: 'desc' } });
     res.json(rows.map(toActividadeGet));
   } catch (err) {
     next(err);

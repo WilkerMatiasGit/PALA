@@ -91,7 +91,11 @@ fila.get('/', async (req, res, next) => {
       }
       porAct.get(a.id).em_espera += 1;
     }
-    res.json([...porAct.values()]);
+    res.json(
+      [...porAct.values()].sort(
+        (a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime()
+      )
+    );
   } catch (err) {
     next(err);
   }

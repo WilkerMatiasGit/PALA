@@ -84,21 +84,21 @@ Frontend:
 #### Como está agora
 - Têm `FiltersBar` + `SimplePagination`: Utilizadores, Estudantes, Actividades, Materiais, Histórico.
 - **Não têm**: `LaboratoriosList`, `CursosList`, `DisciplinasList`, `AprovacoesList`, `RelatoriosList` (tabelas simples sem filtros/paginação).
-- `AprovacoesList` ordena pelo que vem do backend (`GET /aprovacoes` ordena por `criado_em` via `orderBy: {id:'asc'}`) — sem filtro explícito nem controlo de ordenação no UI.
+- `AprovacoesList` ordena pelo que vem do backend (`GET /aprovacoes` ordena por `criado_em` desc — mais recente primeiro) — sem filtro explícito nem controlo de ordenação no UI.
 
 #### O problema
 - Listas de laboratórios/cursos/disciplinas/aprovações/relatórios ficam insustentáveis com volume; quebra o padrão visual das restantes.
-- Aprovações precisam de **ordem de chegada** claramente representada (mais antigas primeiro) e filtros por estado/etapa/laboratório.
+- Aprovações deveriam ter uma ordem clara na fila (**mais recentes primeiro** — decisão actual, substitui a intenção original de "ordem de chegada") e filtros por estado/etapa/laboratório.
 
 #### Como deve ficar
 - Todas as listagens têm `PageHeader` + `FiltersBar` + `Table` + `SimplePagination` (client-side, `PAGE_SIZE=10`), mesmo recorte visual.
-- `AprovacoesList`: filtros por nome, etapa, laboratório + botão/shortcut de ordenação **"Chegada (mais antigo primeiro)"** (default) — a fila já vem por `id asc`; o filtro passa a ser explícito e persistente.
+- `AprovacoesList`: filtros por nome, etapa, laboratório. A fila vem ordenada por `criado_em desc` (mais recentes primeiro) — decisão actual do utilizador, substitui a antiga "ordem de chegada (mais antigo primeiro)".
 
 #### Que alterações fazer
 1. `LaboratoriosList`: filtro `nome` (texto) + paginação; ação de chevron para `/labs/:id` já existente.
 2. `CursosList`: filtro por nome + departamento (enum fixo) + paginação.
 3. `DisciplinasList`: após §2.5 fica só o CRUD de disciplinas; adicionar filtro `nome` + paginação.
-4. `AprovacoesList`: adicionar `FiltersBar` (nome, etapa, laboratório — buscar labs via `laboratoriosService.list()`) + `SimplePagination`. Reforçar a ordenação por `criado_em/id asc` no service (`listFila`) e expor opção de ordenação.
+4. `AprovacoesList`: adicionar `FiltersBar` (nome, etapa, laboratório — buscar labs via `laboratoriosService.list()`) + `SimplePagination`. Ordenação por `criado_em desc` (mais recentes primeiro) — ✅ aplicada no backend (`GET /aprovacoes`); o front não reordena.
 5. `RelatoriosList`: filtros (laboratório, mês/ano) + paginação.
 6. Reutilizar sempre `FilterField` (`type: 'text' | 'select'`) — nenhuma nova lista deve implementar filtros próprias.
 
@@ -217,7 +217,7 @@ Frontend:
 
 ### 2.8. Detalhe de aprovação (cards → tabs, decisão em massa)
 
-> **Estado:** ✅ (E0 backend + E2/E6 front) — `POST /aprovacoes/lote`; `AprovacaoDetalhe.tsx` com cards Agendamentos → Decisão em massa, modal de técnicos (validador+assistente) ao aprovar no Supervisor, lote só rejeitar no Supervisor (aprovou individual com técnicos). Botão «Rejeitar atividade» **sempre visível e habilitado só sob regra do servidor** (`GET /aprovacoes/:id.pode_rejeitar_atividade`): bloqueia se houver sessão `realizado`/`aprovado_supervisor` ou todas `rejeitado`; habilita se todas as não-rejeitadas estiverem na mesma etapa e o utilizador puder votar nessa etapa (`FluxoAprovacao`; admin sempre). **Aprovar e Deixar pendente (DLab) marcam no card** («Alterar decisão»/«Concluir» persistem); **Rejeitar (qualquer etapa) e Aprovar no Supervisor gravam de imediato no modal** (justificação no modal; fechar sem confirmar = nada feito).
+> **Estado:** ✅ (E0 backend + E2/E6/E7 front) — `POST /aprovacoes/lote`; `AprovacaoDetalhe.tsx` com Tabs **Agendamentos** (cards por sessão + decisão em massa) e **Decisões**, modal de técnicos (validador+assistente) ao aprovar no Supervisor, lote só rejeitar no Supervisor (aprovou individual com técnicos). Os **materiais pedidos aparecem dentro de cada card de agendamento, colapsados por defeito** (sem tab «Materiais»). Botão «Rejeitar atividade» **sempre visível e habilitado só sob regra do servidor** (`GET /aprovacoes/:id.pode_rejeitar_atividade`): bloqueia se houver sessão `realizado`/`aprovado_supervisor` ou todas `rejeitado`; habilita se todas as não-rejeitadas estiverem na mesma etapa e o utilizador puder votar nessa etapa (`FluxoAprovacao`; admin sempre). **Aprovar e Deixar pendente (DLab) marcam no card** («Alterar decisão»/«Concluir» persistem); **Rejeitar (qualquer etapa) e Aprovar no Supervisor gravam de imediato no modal** (justificação no modal; fechar sem confirmar = nada feito).
 > ⚠️ **Substituído por §0.1:** a decisão em lote já **não** cria `AprovacaoAgendamento`; grava uma `DecisaoAgendamento` por agendamento e **não** leva `etapa` (deduzida por agendamento). Não implementar a secção "Aprovacao + ligações" abaixo.
 
 #### Como está agora
@@ -243,7 +243,7 @@ Frontend:
 
 ### 2.9. Detalhe da atividade (cards → tabs)
 
-> **Estado:** ✅ (E2/E6) — `ActividadeDetalhe.tsx` com Tabs Geral/Agendamentos/Materiais/Documento/Histórico; header com nome/tipo/estado + laboratório; "Geral" agrupa informação + detalhes do tipo; técnicos por sessão no tab Agendamentos (validador/assistente + confirmações).
+> **Estado:** ✅ (E2/E6/E7) — `ActividadeDetalhe.tsx` com Tabs Geral/Agendamentos/Documento/Histórico; header com nome/tipo/estado + laboratório; "Geral" agrupa informação + detalhes do tipo; técnicos por sessão no tab Agendamentos (validador/assistente + confirmações) e a **lista de materiais solicitados dentro do card de cada agendamento** (a antiga tab «Materiais» foi removida).
 
 #### Como está agora
 - `ActividadeDetalhe` = cards (Informação Geral, Detalhes, Agendamentos, Materiais, Documento, Histórico de Aprovações) em Tabs; REMOVIDO o card "Técnico & Assistente" (E6) — os técnicos vêm por sessão em Agendamentos.
@@ -254,8 +254,7 @@ Frontend:
 #### Como deve ficar
 - Header (nome, tipo, estado, laboratório) e `Tabs`:
   - **Geral** = "Informação geral" + "Detalhe (tipo)";
-  - **Agendamentos** (com técnicos da sessão e confirmações professor/técnico);
-  - **Materiais**;
+  - **Agendamentos** (com técnicos da sessão, confirmações professor/técnico e os materiais pedidos por sessão);
   - **Documento** (só projecto/estágio);
   - **Histórico de Aprovações** (ver §2.10).
 
@@ -342,7 +341,7 @@ Frontend:
 
 ### 2.13. Validação de formulários (erros em tempo-real; numéricos sem negativos/letras)
 
-> **Estado:** parcial ✅ (E1) — novo `NumberInput` (filtra `-`, `.`, `e`, `+`, `sanitizeNumber`; `allowNegative`/`allowDecimal`) aplicado em `ActividadeUpsertModal`, `MaterialUpsertModal`, `EstudanteUpsertModal`, `HistoricoMaterialUpsertModal`, `RelatorioUpsertModal`. Pendente: padrão de erros por campo em tempo-real (item 2).
+> **Estado:** parcial ✅ (E1/E7) — novo `NumberInput` (filtra `-`, `.`, `e`, `+`, `sanitizeNumber`; `allowNegative`/`allowDecimal`; e **`min`/`max` aplicados em tempo-real** via `clampNumber` — ex.: quantidade estimada de material com `min={1}`, impedindo fisicamente digitar 0/negativo) aplicado em `ActividadeUpsertModal`, `MaterialUpsertModal`, `EstudanteUpsertModal`, `HistoricoMaterialUpsertModal`, `RelatorioUpsertModal`. Pendente: padrão de erros por campo em tempo-real (item 2).
 
 #### Como está agora
 - Validação sobretudo no **submit** (`getStepError` por passo no `ActividadeUpsertModal`); erros por campo em tempo-real só parcial (blocos de agendamento).

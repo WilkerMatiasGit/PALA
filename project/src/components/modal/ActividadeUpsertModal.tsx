@@ -575,7 +575,7 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
                           </div>
                           <div className="w-24 space-y-1">
                             <Label className="text-xs">Qtd. estimada</Label>
-                            <NumberInput value={String(mr.quantidade_estimada ?? '')} onValueChange={(v) => {
+                            <NumberInput min={1} value={mr.quantidade_estimada > 0 ? String(mr.quantidade_estimada) : ''} onValueChange={(v) => {
                               const copy = [...agendamentos]; copy[i].materiais[j].quantidade_estimada = v === '' ? 0 : Number(v); setAgendamentos(copy);
                             }} />
                           </div>

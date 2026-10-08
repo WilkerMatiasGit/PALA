@@ -15,7 +15,7 @@ router.use(authRequired);
 // GET /user — listar (A)
 router.get('/', rbac('admin'), async (req, res, next) => {
   try {
-    const users = await prisma.utilizador.findMany({ where: { activo: true }, orderBy: { id: 'asc' } });
+    const users = await prisma.utilizador.findMany({ where: { activo: true }, orderBy: { criado_em: 'desc' } });
     res.json(users.map(toUserGet));
   } catch (err) {
     next(err);

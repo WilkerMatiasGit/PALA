@@ -146,11 +146,11 @@ src/
 
 ### 3.2. PADRÕES DE TELA (resumo do comportamento actual)
 
-- **Listagens**: `PageHeader` + `FiltersBar` + `Table` + `SimplePagination` (client-side, `PAGE_SIZE=10`). Com filtros+paginação: **Utilizadores, Estudantes, Actividades, Materiais, Histórico, Laboratórios, Cursos, Disciplinas, Aprovações, Relatórios** (✅ E1).
-- **Detalhes**: telas em "cards" no grid (Laboratório, Material, Relatório) e em **tabs** (Atividade ✅ E2, Aprovação ✅ E2, Estudante ✅ E2). 📋 Tabs planeadas em Laboratório (PLANO.md §2.6).
+- **Listagens**: `PageHeader` + `FiltersBar` + `Table` + `SimplePagination` (client-side, `PAGE_SIZE=10`). Com filtros+paginação: **Utilizadores, Estudantes, Actividades, Materiais, Histórico, Laboratórios, Cursos, Disciplinas, Aprovações, Relatórios** (✅ E1). A ordenação é feita **no backend** por `criado_em: 'desc'` (mais recentes primeiro) nos endpoints de listagem; o front não reordena.
+- **Detalhes**: telas em "cards" no grid (Laboratório, Material, Relatório) e em **tabs** (Atividade ✅ E2, Aprovação ✅ E2, Estudante ✅ E2). 📋 Tabs planeadas em Laboratório (PLANO.md §2.6). Os **materiais solicitados são apresentados dentro do card de cada agendamento** (não há tab «Materiais» nem em `ActividadeDetalhe` nem em `AprovacaoDetalhe`): no detalhe de Atividade vêm sempre visíveis; no detalhe de Aprovação começam **colapsados** (botão com seta para expandir). As tabs passam a **Geral · Agendamentos · (Documento) · Histórico** (Atividade) e **Agendamentos · Decisões** (Aprovação).
 - **Modais de CRUD**: `*UpsertModal` sobre `Dialog`. **ConfirmDialog** (AlertDialog) para acções destrutivas. ⚠ **Não usar `confirm()`/`alert()`/`prompt()` nativos** — `window.prompt` eliminado (E1, `ResetPasswordModal`); faltam confirmações de acções críticas (PLANO.md §2.3).
 - **Calendário**: ✅ E2 — visões **mensal/semanal/diária** (tabs), todos os dias da semana/mês visíveis, badges por agendamento `aprovado_supervisor`, alerta de choque (mesmo lab/dia ou sobreposição na timeline), navegação ‹ › + botão "Hoje" + input `type=date`. Backend `GET /agendamentos` e `/calendario` aceitam `de`/`ate` (substituem `mes`/`ano`).
-- **Validação de formulários**: 🟡 sobretudo no submit (`getStepError` por passo); erros por campo em tempo-real inexistentes; inputs numéricos agora via `NumberInput` (bloqueiam `-`/`.`/`e`/`+` — ✅ E1). 📋 erros por campo (PLANO.md §2.13).
+- **Validação de formulários**: 🟡 sobretudo no submit (`getStepError` por passo); erros por campo em tempo-real inexistentes; inputs numéricos agora via `NumberInput` (bloqueiam `-`/`.`/`e`/`+` e aplicam `min`/`max` em tempo-real — ex.: quantidade estimada de material com `min={1}` — ✅ E1). 📋 erros por campo (PLANO.md §2.13).
 
 ### 3.3. SERVICES
 

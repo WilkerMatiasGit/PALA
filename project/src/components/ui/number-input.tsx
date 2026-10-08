@@ -23,11 +23,25 @@ export function sanitizeNumber(
   return v;
 }
 
+// Aplica limites numéricos em tempo-real: um valor não-vazio abaixo de `min`
+// (ou acima de `max`) é ajustado para o limite, impedindo fisicamente digitar
+// fora do intervalo (ex.: 0/negativos quando min=1). O vazio é permitido.
+function clampNumber(v: string, min?: number, max?: number): string {
+  if (v === '') return v;
+  const n = Number(v);
+  if (Number.isNaN(n)) return v;
+  if (min != null && n < min) return String(min);
+  if (max != null && n > max) return String(max);
+  return v;
+}
+
 export interface NumberInputProps
-  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'type'> {
+  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'type' | 'min' | 'max'> {
   onValueChange: (value: string) => void;
   allowNegative?: boolean;
   allowDecimal?: boolean;
+  min?: number;
+  max?: number;
 }
 
 export function NumberInput({
@@ -35,6 +49,8 @@ export function NumberInput({
   onValueChange,
   allowNegative,
   allowDecimal,
+  min,
+  max,
   className,
   ...props
 }: NumberInputProps) {
@@ -44,7 +60,9 @@ export function NumberInput({
       inputMode="decimal"
       autoComplete="off"
       value={value ?? ''}
-      onChange={(e) => onValueChange(sanitizeNumber(e.target.value, { allowNegative, allowDecimal }))}
+      onChange={(e) =>
+        onValueChange(clampNumber(sanitizeNumber(e.target.value, { allowNegative, allowDecimal }), min, max))
+      }
       className={cn(className)}
       {...props}
     />

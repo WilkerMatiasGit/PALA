@@ -140,7 +140,6 @@ export default function ActividadeDetalhe() {
         <TabsList className="mb-4">
           <TabsTrigger value="geral">Geral</TabsTrigger>
           <TabsTrigger value="agendamentos">Agendamentos</TabsTrigger>
-          <TabsTrigger value="materiais">Materiais</TabsTrigger>
           {(actividade.tipo === 'projecto' || actividade.tipo === 'estagio') && (
             <TabsTrigger value="documento">Documento</TabsTrigger>
           )}
@@ -211,6 +210,7 @@ export default function ActividadeDetalhe() {
                   {agendamentos.map((ag) => {
                     const agEst = formatAgendamentoEstado(ag.estado);
                     const aprovado = ag.estado === 'aprovado_supervisor';
+                    const mats = materiais.filter((m) => m.agendamento_id === ag.id);
                     return (
                       <div key={ag.id} className="rounded-lg border p-3">
                         <div className="flex items-center justify-between">
@@ -251,29 +251,19 @@ export default function ActividadeDetalhe() {
                             {ag.assistente_nome && <span><span className="font-medium">Assistente:</span> {ag.assistente_nome}</span>}
                           </div>
                         )}
+                        {mats.length > 0 && (
+                          <div className="mt-2 border-t pt-2">
+                            <p className="flex items-center gap-1 text-xs font-medium text-muted-foreground"><Package className="h-3 w-3" /> Materiais solicitados</p>
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {mats.map((m) => (
+                                <Badge key={m.id} variant="secondary" className="text-xs">{m.material_nome} × {m.quantidade_estimada}</Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="materiais">
-          <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Package className="h-4 w-4" /> Materiais Solicitados</CardTitle></CardHeader>
-            <CardContent>
-              {materiais.length === 0 ? (
-                <EmptyState icon={Package} title="Sem materiais solicitados" />
-              ) : (
-                <div className="space-y-2">
-                  {materiais.map((m) => (
-                    <div key={m.id} className="flex justify-between rounded-lg border p-3 text-sm">
-                      <span className="font-medium">{m.material_nome}</span>
-                      <Badge variant="secondary">{m.quantidade_estimada}</Badge>
-                    </div>
-                  ))}
                 </div>
               )}
             </CardContent>

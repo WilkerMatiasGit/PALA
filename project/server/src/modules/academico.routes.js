@@ -9,7 +9,7 @@ disciplinas.use(authRequired);
 
 disciplinas.get('/', async (req, res, next) => {
   try {
-    const rows = await prisma.disciplina.findMany({ where: { activo: true }, orderBy: { id: 'asc' } });
+    const rows = await prisma.disciplina.findMany({ where: { activo: true }, orderBy: { criado_em: 'desc' } });
     res.json(rows.map(toDisciplinaGet));
   } catch (err) {
     next(err);
@@ -129,7 +129,7 @@ estudantes.get('/', async (req, res, next) => {
     const rows = await prisma.estudante.findMany({
       where: { activo: true },
       include: estudanteInclude,
-      orderBy: { id: 'asc' },
+      orderBy: { criado_em: 'desc' },
     });
     res.json(rows.map(toEstudanteGet));
   } catch (err) {

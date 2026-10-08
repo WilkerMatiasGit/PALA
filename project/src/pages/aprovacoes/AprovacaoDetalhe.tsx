@@ -46,6 +46,9 @@ import {
   Clock,
   Users,
   UserCheck,
+  Package,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 
 /** Aprovação DLab marcada localmente — ainda nada foi gravado até premir "Concluir". */
@@ -80,6 +83,9 @@ export default function AprovacaoDetalhe() {
 
   // Fluxo por agendamento (DLab): marcações locais até "Concluir".
   const [marcados, setMarcados] = useState<Record<number, Marcacao>>({});
+
+  // Materiais por sessão: começam colapsados para não sobrecarregar o card.
+  const [materiaisAbertos, setMateriaisAbertos] = useState<Record<number, boolean>>({});
 
   // Modal de aprovação do Supervisor: seleção do par de técnicos (validador+assistente).
   const [tecModalId, setTecModalId] = useState<number | null>(null);
@@ -343,7 +349,6 @@ export default function AprovacaoDetalhe() {
               <History className="h-3 w-3" /> Decisões
             </span>
           </TabsTrigger>
-          <TabsTrigger value="materiais">Materiais</TabsTrigger>
         </TabsList>
 
         <TabsContent value="agendamentos">
@@ -358,6 +363,7 @@ export default function AprovacaoDetalhe() {
                 {agendamentos.map((ag) => {
                   const agEst = formatAgendamentoEstado(ag.estado);
                   const marcado = marcados[ag.id];
+                  const mats = materiais.filter((m) => m.agendamento_id === ag.id);
                   const selecionavel = ag.pode_decidir && !marcado;
                   const podeDeixarPendente = ag.pode_decidir && ag.etapa_alvo === 'dlab';
                   return (
@@ -404,6 +410,34 @@ export default function AprovacaoDetalhe() {
                               <Badge variant="outline" className="gap-1">
                                 <UserCheck className="h-3 w-3" /> Assistente: {ag.assistente_nome}
                               </Badge>
+                            )}
+                          </div>
+                        )}
+
+                        {mats.length > 0 && (
+                          <div className="mt-2 border-t pt-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setMateriaisAbertos((s) => ({ ...s, [ag.id]: !s[ag.id] }))
+                              }
+                              className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                            >
+                              {materiaisAbertos[ag.id] ? (
+                                <ChevronDown className="h-3 w-3" />
+                              ) : (
+                                <ChevronRight className="h-3 w-3" />
+                              )}
+                              <Package className="h-3 w-3" /> Materiais solicitados ({mats.length})
+                            </button>
+                            {materiaisAbertos[ag.id] && (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {mats.map((m) => (
+                                  <Badge key={m.id} variant="secondary" className="text-xs">
+                                    {m.material_nome} × {m.quantidade_estimada}
+                                  </Badge>
+                                ))}
+                              </div>
                             )}
                           </div>
                         )}
@@ -612,25 +646,6 @@ export default function AprovacaoDetalhe() {
                     </div>
                   );
                 })}
-              </div>
-            )}
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="materiais">
-          <Card className="p-0">
-            {materiais.length === 0 ? (
-              <div className="p-4">
-                <EmptyState icon={FileText} title="Sem materiais solicitados" />
-              </div>
-            ) : (
-              <div className="divide-y">
-                {materiais.map((m) => (
-                  <div key={m.id} className="flex justify-between p-4 text-sm">
-                    <span className="font-medium">{m.material_nome}</span>
-                    <Badge variant="secondary">{m.quantidade_estimada}</Badge>
-                  </div>
-                ))}
               </div>
             )}
           </Card>

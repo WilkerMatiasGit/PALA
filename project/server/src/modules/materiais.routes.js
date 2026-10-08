@@ -24,7 +24,7 @@ router.get('/', rbac(...MAT_ROLES), async (req, res, next) => {
       where.categoria_id = categoria_id;
     }
     if (req.query.estado) where.estado = req.query.estado;
-    const rows = await prisma.material.findMany({ where, include: materialInclude, orderBy: { id: 'asc' } });
+    const rows = await prisma.material.findMany({ where, include: materialInclude, orderBy: { criado_em: 'desc' } });
     res.json(rows.map(toMaterialGet));
   } catch (err) {
     next(err);
@@ -37,7 +37,7 @@ router.get('/historico', rbac(...MAT_ROLES), async (req, res, next) => {
     const where = { activo: true };
     if (req.query.material_id) where.material_id = Number(req.query.material_id);
     if (req.query.motivo) where.motivo = req.query.motivo;
-    const rows = await prisma.historicoMaterial.findMany({ where, include: historicoInclude, orderBy: { id: 'asc' } });
+    const rows = await prisma.historicoMaterial.findMany({ where, include: historicoInclude, orderBy: { criado_em: 'desc' } });
     res.json(rows.map(toHistoricoGet));
   } catch (err) {
     next(err);
@@ -78,7 +78,7 @@ router.get('/:id/historico', rbac(...MAT_ROLES), async (req, res, next) => {
     const rows = await prisma.historicoMaterial.findMany({
       where: { material_id: Number(req.params.id), activo: true },
       include: historicoInclude,
-      orderBy: { id: 'asc' },
+      orderBy: { criado_em: 'desc' },
     });
     res.json(rows.map(toHistoricoGet));
   } catch (err) {

@@ -9,7 +9,7 @@ router.use(authRequired);
 // GET /cursos — todos
 router.get('/', async (req, res, next) => {
   try {
-    const cursos = await prisma.curso.findMany({ where: { activo: true }, orderBy: { id: 'asc' } });
+    const cursos = await prisma.curso.findMany({ where: { activo: true }, orderBy: { criado_em: 'desc' } });
     res.json(cursos.map(toCursoGet));
   } catch (err) {
     next(err);

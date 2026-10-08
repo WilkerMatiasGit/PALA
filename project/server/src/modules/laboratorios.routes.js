@@ -12,7 +12,7 @@ const labInclude = { unidadeLaboratorial: true };
 // GET /labs
 router.get('/', async (req, res, next) => {
   try {
-    const labs = await prisma.laboratorio.findMany({ where: { activo: true }, include: labInclude, orderBy: { id: 'asc' } });
+    const labs = await prisma.laboratorio.findMany({ where: { activo: true }, include: labInclude, orderBy: { criado_em: 'desc' } });
     res.json(labs.map(toLabGet));
   } catch (err) {
     next(err);
