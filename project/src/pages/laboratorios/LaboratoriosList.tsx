@@ -74,7 +74,7 @@ export default function LaboratoriosList() {
         {error ? (
           <div className="p-4"><ErrorState onRetry={load} /></div>
         ) : loading ? (
-          <div className="p-4"><TableSkeleton rows={4} cols={3} /></div>
+          <div className="p-4"><TableSkeleton rows={4} cols={4} /></div>
         ) : pageData.length === 0 ? (
           <EmptyState icon={FlaskConical} title="Sem laboratórios" />
         ) : (
@@ -83,6 +83,7 @@ export default function LaboratoriosList() {
               <TableRow>
                 <TableHead>Nome</TableHead>
                 <TableHead>Unidade Laboratorial</TableHead>
+                <TableHead>Capacidade</TableHead>
                 <TableHead>Descrição</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
@@ -92,6 +93,7 @@ export default function LaboratoriosList() {
                 <TableRow key={lab.id} className={canViewDetalhe ? 'cursor-pointer' : ''} onClick={() => canViewDetalhe && navigate(`/labs/${lab.id}`)}>
                   <TableCell className="font-medium">{lab.nome}</TableCell>
                   <TableCell><Badge variant="secondary">{catalogoLabel(lab.tipo)}</Badge></TableCell>
+                  <TableCell>{lab.capacidade}</TableCell>
                   <TableCell className="max-w-xs truncate text-muted-foreground">{lab.descricao}</TableCell>
                   <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                     <div className="flex justify-end gap-1">

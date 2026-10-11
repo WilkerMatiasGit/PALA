@@ -215,6 +215,7 @@ model Laboratorio {
   id                      Int      @id @default(autoincrement())
   nome                    String
   unidade_laboratorial_id Int
+  capacidade              Int      @default(40)
   descricao               String?
   criado_em               DateTime @default(now())
   actualizado_em          DateTime @updatedAt
@@ -366,6 +367,21 @@ model FluxoAprovacao {
   activo         Boolean @default(true)
 
   @@map("fluxo_aprovacao")
+}
+
+// Limite de participantes por tipo de atividade (configurável em Configuração).
+// `limite_activo` é o toggle de aplicação do limite; `activo` é o soft delete (BaseEntity).
+model LimiteParticipantes {
+  id             Int            @id @default(autoincrement())
+  tipo           ActividadeTipo @unique
+  min            Int
+  max            Int
+  limite_activo  Boolean        @default(false)
+  criado_em      DateTime       @default(now())
+  actualizado_em DateTime       @updatedAt
+  activo         Boolean        @default(true)
+
+  @@map("limites_participantes")
 }
 
 model Agendamento {

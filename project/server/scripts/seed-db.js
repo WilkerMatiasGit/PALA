@@ -43,6 +43,7 @@ async function run() {
   await prisma.unidadeLaboratorial.deleteMany();
   await prisma.categoriaMaterial.deleteMany();
   await prisma.unidade.deleteMany();
+  await prisma.limiteParticipantes.deleteMany();
 
   // ---- Catálogos (PLANO.md §2.1) ----
   console.log('[seed] catalogos...');
@@ -86,10 +87,21 @@ async function run() {
   console.log('[seed] laboratorios...');
   await prisma.laboratorio.createMany({
     data: [
-      { id: 1, nome: 'Lab. Química 1', unidade_laboratorial_id: 1, descricao: 'Laboratório de Química Geral e Orgânica', criado_em: D('2025-01-01T10:00:00Z') },
-      { id: 2, nome: 'Lab. Física', unidade_laboratorial_id: 2, descricao: 'Laboratório de Física Aplicada e Mecânica', criado_em: D('2025-01-01T10:00:00Z') },
-      { id: 3, nome: 'Lab. Química 2', unidade_laboratorial_id: 1, descricao: 'Laboratório de Química Analítica', criado_em: D('2025-01-01T10:00:00Z') },
-      { id: 4, nome: 'Lab. Multidisciplinar', unidade_laboratorial_id: 3, descricao: 'Laboratório multiuso para projetos e estágios', criado_em: D('2025-01-01T10:00:00Z') },
+      { id: 1, nome: 'Lab. Química 1', unidade_laboratorial_id: 1, capacidade: 40, descricao: 'Laboratório de Química Geral e Orgânica', criado_em: D('2025-01-01T10:00:00Z') },
+      { id: 2, nome: 'Lab. Física', unidade_laboratorial_id: 2, capacidade: 30, descricao: 'Laboratório de Física Aplicada e Mecânica', criado_em: D('2025-01-01T10:00:00Z') },
+      { id: 3, nome: 'Lab. Química 2', unidade_laboratorial_id: 1, capacidade: 24, descricao: 'Laboratório de Química Analítica', criado_em: D('2025-01-01T10:00:00Z') },
+      { id: 4, nome: 'Lab. Multidisciplinar', unidade_laboratorial_id: 3, capacidade: 40, descricao: 'Laboratório multiuso para projetos e estágios', criado_em: D('2025-01-01T10:00:00Z') },
+    ],
+  });
+
+  // ---- Limites de participantes por tipo (todos inativos por defeito) ----
+  console.log('[seed] limites de participantes...');
+  await prisma.limiteParticipantes.createMany({
+    data: [
+      { id: 1, tipo: 'aula', min: 1, max: 40, limite_activo: false },
+      { id: 2, tipo: 'visita', min: 1, max: 40, limite_activo: false },
+      { id: 3, tipo: 'projecto', min: 1, max: 40, limite_activo: false },
+      { id: 4, tipo: 'estagio', min: 1, max: 40, limite_activo: false },
     ],
   });
 

@@ -9,6 +9,18 @@ router.use(authRequired);
 
 const labInclude = { unidadeLaboratorial: true };
 
+// Normaliza/valida a capacidade: ausente → default 40; presente → inteiro >= 1.
+function parseCapacidade(valor) {
+  if (valor === undefined || valor === null || valor === '') return 40;
+  const n = Number(valor);
+  if (!Number.isInteger(n) || n < 1) {
+    const e = new Error('A capacidade do laboratório deve ser um inteiro maior ou igual a 1');
+    e.status = 400;
+    throw e;
+  }
+  return n;
+}
+
 // GET /labs
 router.get('/', async (req, res, next) => {
   try {
@@ -33,8 +45,9 @@ router.get('/:id', rbac('admin', 'tecnico', 'coordenador_dlab', 'supervisor', 'c
 // POST /labs — A
 router.post('/', rbac('admin'), async (req, res, next) => {
   try {
-    const { nome, tipo, descricao } = req.body || {};
+    const { nome, tipo, descricao, capacidade } = req.body || {};
     if (!nome || !tipo) return res.status(400).json({ message: 'nome e tipo são obrigatórios' });
+    const capacidadeNum = parseCapacidade(capacidade);
     const unidade_laboratorial_id = await unidadeLaboratorialId(tipo);
     if (!unidade_laboratorial_id) {
       return res.status(400).json({ message: `Tipo de laboratório desconhecido: ${tipo}` });
@@ -46,11 +59,12 @@ router.post('/', rbac('admin'), async (req, res, next) => {
       return res.status(409).json({ message: 'Já existe um laboratório com este nome' });
     }
     const novo = await prisma.laboratorio.create({
-      data: { nome, unidade_laboratorial_id, descricao: descricao || '' },
+      data: { nome, unidade_laboratorial_id, descricao: descricao || '', capacidade: capacidadeNum },
       include: labInclude,
     });
     res.status(201).json(toLabGet(novo));
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ message: err.message });
     next(err);
   }
 });
@@ -60,7 +74,7 @@ router.put('/:id', rbac('admin'), async (req, res, next) => {
   try {
     const l = await prisma.laboratorio.findUnique({ where: { id: Number(req.params.id) } });
     if (!l) return res.status(404).json({ message: 'Laboratório não encontrado' });
-    const { nome, tipo, descricao } = req.body || {};
+    const { nome, tipo, descricao, capacidade } = req.body || {};
     if (nome !== undefined) {
       const dup = await prisma.laboratorio.findFirst({
         where: { activo: true, id: { not: l.id }, nome: String(nome).trim() },
@@ -77,9 +91,11 @@ router.put('/:id', rbac('admin'), async (req, res, next) => {
       data.unidade_laboratorial_id = unidade_laboratorial_id;
     }
     if (descricao !== undefined) data.descricao = descricao;
+    if (capacidade !== undefined) data.capacidade = parseCapacidade(capacidade);
     const atualizado = await prisma.laboratorio.update({ where: { id: l.id }, data, include: labInclude });
     res.json(toLabGet(atualizado));
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ message: err.message });
     next(err);
   }
 });

@@ -16,8 +16,10 @@ import { utilizadoresService } from '@/services/utilizadores.service';
 import { cursosService } from '@/services/cursos.service';
 import { materiaisService } from '@/services/materiais.service';
 import { agendamentosService } from '@/services/agendamentos.service';
+import { configuracaoService } from '@/services/configuracao.service';
 import { ACTIVIDADE_TIPO_OPTIONS, TURNO_TIPO_OPTIONS } from '@/services/enums';
 import type { ActividadeGet, ActividadeUpsert, ActividadeFullUpsert } from '@/types/actividade.types';
+import type { LimiteParticipantesGet } from '@/types/configuracao.types';
 import type { LaboratorioGet } from '@/types/laboratorio.types';
 import type { UtilizadorGet } from '@/types/utilizador.types';
 import type { CursoDisciplinaGet } from '@/types/disciplina.types';
@@ -81,6 +83,7 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
   const [materiais, setMateriais] = useState<MaterialGet[]>([]);
   const [existingAgendamentos, setExistingAgendamentos] = useState<AgendamentoGet[]>([]);
   const [estudantes, setEstudantes] = useState<EstudanteGet[]>([]);
+  const [limites, setLimites] = useState<LimiteParticipantesGet[]>([]);
 
   // Step 1: base
   const [nome, setNome] = useState('');
@@ -124,6 +127,7 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
     cursosService.listCursoDisciplinas().then(setCursoDisciplinas).catch(() => setCursoDisciplinas([]));
     cursosService.listEstudantes().then(setEstudantes).catch(() => setEstudantes([]));
     utilizadoresService.list().then(setUsers).catch(() => setUsers([]));
+    configuracaoService.getLimites().then(setLimites).catch(() => setLimites([]));
   }, []);
 
   useEffect(() => {
@@ -210,6 +214,8 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
         if (!Number.isInteger(Number(a.num_participantes)) || Number(a.num_participantes) < 1) {
           return 'Indique o número de participantes (mínimo 1) em cada sessão';
         }
+        const rErr = rangeError(Number(a.num_participantes));
+        if (rErr) return rErr;
       }
       // 2) conflito entre blocos do próprio formulário (mesmo dia + sobreposição)
       for (let i = 0; i < filled.length; i++) {
@@ -242,6 +248,28 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
     return null;
   };
 
+  // Intervalo de participantes permitido para o tipo/laboratório atuais.
+  const labCap = labs.find((l) => String(l.id) === labId)?.capacidade;
+  const limite = limites.find((l) => l.tipo === tipo) ?? null;
+  const limiteActivo = !!limite?.limite_activo;
+  const minPart = limite && limiteActivo ? limite.min : 1;
+  const maxPart = limite
+    ? (limiteActivo ? (labCap != null ? Math.min(labCap, limite.max) : limite.max) : labCap)
+    : labCap;
+  const labAbaixoMinimo = labCap != null && labCap < minPart;
+
+  const rangeError = (participantes: number): string | null => {
+    if (!Number.isInteger(participantes)) return null;
+    if (participantes < minPart) return `Mínimo de participantes para ${ACTIVIDADE_TIPO_OPTIONS.find((o) => o.value === tipo)?.label ?? tipo}: ${minPart}`;
+    if (maxPart != null && participantes > maxPart) {
+      if (limiteActivo && limite && (labCap == null || limite.max <= labCap)) {
+        return `Máximo de participantes para ${ACTIVIDADE_TIPO_OPTIONS.find((o) => o.value === tipo)?.label ?? tipo}: ${limite.max}`;
+      }
+      return `Máximo de participantes: capacidade do laboratório (${labCap})`;
+    }
+    return null;
+  };
+
   // Erro específico de um bloco de agendamento para validação em tempo real
   const blocoError = (a: AgendamentoBloc): string | null => {
     if (!a.data) return null; // ainda não escolheu o dia
@@ -251,10 +279,12 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
     if (!Number.isInteger(Number(a.num_participantes)) || Number(a.num_participantes) < 1) {
       return 'Nº de participantes inválido (mínimo 1)';
     }
-    return null;
+    return rangeError(Number(a.num_participantes));
   };
 
   const handleSubmit = async () => {
+    const passo3 = getStepError(3);
+    if (passo3) { toast.error(passo3); return; }
     for (const a of agendamentos) {
       if (!a.data || !a.hora_inicio || !a.hora_fim) continue;
       for (const m of a.materiais) {
@@ -497,6 +527,11 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
               Adicione as sessões: escolha primeiro o dia e, em seguida, o intervalo de horas dentro desse dia. O
               número de participantes é definido por sessão.
             </p>
+            {labAbaixoMinimo && (
+              <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-800">
+                A capacidade do laboratório ({labCap}) é inferior ao mínimo de {ACTIVIDADE_TIPO_OPTIONS.find((o) => o.value === tipo)?.label ?? tipo} ({minPart}). Não é possível criar sessões deste tipo neste laboratório.
+              </p>
+            )}
             {agendamentos.map((ag, i) => {
               const err = blocoError(ag);
               return (
@@ -525,7 +560,10 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
                         <Label className="text-xs">Nº participantes</Label>
                         <NumberInput value={ag.num_participantes} onValueChange={(v) => {
                           const copy = [...agendamentos]; copy[i].num_participantes = v; setAgendamentos(copy);
-                        }} />
+                        }} min={1} />
+                        {maxPart != null && (
+                          <p className="text-[11px] text-muted-foreground">Mín. {minPart} · Máx. {maxPart}</p>
+                        )}
                       </div>
                       {agendamentos.length > 1 && (
                         <Button variant="ghost" size="icon" onClick={() => setAgendamentos(agendamentos.filter((_, idx) => idx !== i))}>

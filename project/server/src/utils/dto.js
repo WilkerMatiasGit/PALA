@@ -18,6 +18,7 @@ export function toLabGet(l) {
     id: l.id,
     nome: l.nome,
     tipo: l.unidadeLaboratorial?.nome ?? 'outro',
+    capacidade: l.capacidade,
     descricao: l.descricao ?? '',
     criado_em: l.criado_em,
     actualizado_em: l.actualizado_em,
@@ -32,6 +33,16 @@ export function toCursoGet(c) {
     abreviacao: c.abreviacao,
     criado_em: c.criado_em,
     actualizado_em: c.actualizado_em,
+  };
+}
+
+export function toLimiteGet(l) {
+  return {
+    id: l.id,
+    tipo: l.tipo,
+    min: l.min,
+    max: l.max,
+    limite_activo: l.limite_activo,
   };
 }
 

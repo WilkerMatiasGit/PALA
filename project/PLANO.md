@@ -487,3 +487,19 @@ O fluxo DLab → Supervisor está **hardcoded**: `AprovacaoEtapa {dlab, supervis
 3. **E2 — Telas novas/refactor**: `EstudanteDetalhe` (§2.4), `CursoDetalhe` + simplificação de Disciplinas (§2.5), calendário 3 visões + "Hoje" + filtros `de`/`ate` no backend (§2.7), tabs Aprovação + decisão em massa (§2.8), tabs Atividade + histórico por lote (§2.9/2.10), Perfil (§2.12), Configuração (§3). (**✅ concluído** — pendente remetido para front futuro: tabs Lab (§2.6), erros por campo em tempo-real (§2.13), ordenação explícita na fila (§2.2/2.6).)
 4. **E3 — Ambientes**: provider Postgres + adapters + Vercel function + Neon + CI (§4). (**✅ concluído** — Neon ligado + migração `init` + seed; projecto Vercel `dlab` com `DATABASE_URL`/`DIRECT_URL` (Production+Preview); deploy live https://dlab-gray.vercel.app; scripts `deploy`/`dev`. Pendente opcional: CI GitHub Actions.)
 5. **E4 — Hardening/auditoria**: helmet/rate-limit/CORS whitelist, remoção de código morto, PDF real, notificações socket/cron (opcional). (**✅ concluído o bloco principal** — helmet + express-rate-limit por camada (leituras 5000/15min, escritas 1000/15min, login 20/15min) + CORS whitelist por env; removidos `mockData.ts`/`seed.js` legados/`server/data`/`DATA_FILE` e deps não usadas (`react-query`, `react-table`, `zustand`, `supabase`, `zod`, `resolvers`); **lint a 0 erros** (16 corrigidos; 17 warnings documentados: `exhaustive-deps`×9, `only-export-components`×8). **Pendentes:** ❌/🔴 PDF real via pdfkit (§6 RF19), notificações socket/cron reais (§5 RF14/RF18), CI GitHub Actions, 17 warnings de lint.)
+6. **E5 — Modelo por agendamento independente**: `DecisaoAgendamento` (log imutável) substitui `aprovacoes`+`aprovacao_agendamentos`; estado da atividade derivado das sessões; `num_participantes` no agendamento. (**✅ concluído** — migração aplicada no Neon com dados preservados; front: participantes e decisões por sessão.)
+7. **E6 — Técnicos por sessão + estados derivados**: `AgendamentoTecnico` (validador+assistente obrigatórios por sessão na aprovação do Supervisor); `ActividadeEstado` fecha em `{pendente, em_andamento, rejeitada, realizada}`. (**✅ concluído** — migrações aplicadas no Neon; front com decisão imediata no modal para Rejeitar/Aprovar Supervisor.)
+8. **E7 — Materiais por sessão**: `AgendamentoMaterial` (`@@unique [agendamento_id, material_id]`); `/actividades/full` recebe `agendamentos[].materiais[]`; balanço de stock somado por material. (**✅ concluído** — tabela recriada via `db push --force-reset`; RF14 inalterado.)
+9. **E8 — Limites de participantes**: `laboratorios.capacidade` + `limites_participantes`; `utils/validarSessao.js`; `GET/PUT /configuracao/limites`. (**✅ concluído** — migração `20261010000000_capacidade_limites_participantes` aplicada por método manual; smoke test HTTP + unit `validarSessao`.)
+
+### 6.1. Método de migração (drift herdado — ler antes de novas migrações)
+
+A base Neon **nunca teve `_prisma_migrations`**: o schema foi construído com `prisma db push` (E7 usou `--force-reset`). Como consequência, `prisma migrate dev` propõe *reset* e os ficheiros de migração antigos aparecem como **não aplicados** no `migrate status` (não reproduzem o schema actual).
+
+**Método adoptado (E8 em diante):**
+1. Escrever o `migration.sql` manualmente — **só** `ADD COLUMN` / `CREATE TABLE` / índices / constraints (nada destrutivo), alinhado com `schema.prisma`.
+2. Aplicar com `prisma db execute --stdin` envolvido em `BEGIN; … COMMIT;`.
+3. Marcar com `prisma migrate resolve --applied <nome>`.
+4. Confirmar com `prisma migrate diff --from-config-datasource --to-schema server/prisma/schema.prisma --exit-code` → tem de sair **vazio**.
+
+**Nunca** correr `migrate dev` nem `db push --force-reset` sobre esta base.

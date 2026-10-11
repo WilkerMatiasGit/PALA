@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Spinner } from '@/components/ui/spinner';
 import { SearchSelect } from '@/components/ui/search-select';
+import { NumberInput } from '@/components/ui/number-input';
 import { laboratoriosService } from '@/services/laboratorios.service';
 import { unidadesLaboratoriaisService } from '@/services/catalogos.service';
 import type { LaboratorioGet, LaboratorioUpsert } from '@/types/laboratorio.types';
@@ -22,6 +23,7 @@ export function LaboratorioUpsertModal({ open, onOpenChange, laboratorio, onSave
   const [saving, setSaving] = useState(false);
   const [nome, setNome] = useState(laboratorio?.nome ?? '');
   const [tipo, setTipo] = useState(laboratorio?.tipo ?? '');
+  const [capacidade, setCapacidade] = useState(String(laboratorio?.capacidade ?? 40));
   const [descricao, setDescricao] = useState(laboratorio?.descricao ?? '');
   const [unidades, setUnidades] = useState<{ value: string; label: string }[]>([]);
   const [labs, setLabs] = useState<LaboratorioGet[]>([]);
@@ -56,11 +58,16 @@ export function LaboratorioUpsertModal({ open, onOpenChange, laboratorio, onSave
     const nomeTrim = nome.trim();
     if (!nomeTrim) { toast.error('Indique o nome do laboratório'); return; }
     if (!tipo) { toast.error('Selecione a unidade laboratorial'); return; }
+    const capacidadeNum = Number(capacidade);
+    if (!Number.isInteger(capacidadeNum) || capacidadeNum < 1) {
+      toast.error('A capacidade deve ser um número inteiro maior ou igual a 1');
+      return;
+    }
     const duplicado = labs.some((l) => l.id !== laboratorio?.id && l.nome.toLowerCase() === nomeTrim.toLowerCase());
     if (duplicado) { toast.error('Já existe um laboratório com este nome'); return; }
     setSaving(true);
     try {
-      const data: LaboratorioUpsert = { nome: nomeTrim, tipo, descricao };
+      const data: LaboratorioUpsert = { nome: nomeTrim, tipo, capacidade: capacidadeNum, descricao };
       if (laboratorio) {
         await laboratoriosService.update(laboratorio.id, data);
         toast.success('Laboratório atualizado');
@@ -95,6 +102,17 @@ export function LaboratorioUpsertModal({ open, onOpenChange, laboratorio, onSave
               placeholder="Selecionar unidade..."
               canCreate
               onCreate={handleCreateUnidade}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="capacidade">Capacidade (nº de lugares)</Label>
+            <NumberInput
+              id="capacidade"
+              value={capacidade}
+              onValueChange={setCapacidade}
+              allowDecimal={false}
+              min={1}
+              placeholder="40"
             />
           </div>
           <div className="space-y-2">

@@ -55,8 +55,15 @@ export default function LaboratorioDetalhe() {
       />
 
       <Card className="mb-6">
-        <CardContent className="p-6">
-          <p className="text-sm text-muted-foreground">{lab.descricao}</p>
+        <CardContent className="flex flex-wrap items-center gap-x-8 gap-y-2 p-6">
+          <div>
+            <p className="text-xs uppercase text-muted-foreground">Capacidade</p>
+            <p className="text-sm font-medium">{lab.capacidade} pessoas</p>
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs uppercase text-muted-foreground">Descrição</p>
+            <p className="text-sm text-muted-foreground">{lab.descricao}</p>
+          </div>
         </CardContent>
       </Card>
 

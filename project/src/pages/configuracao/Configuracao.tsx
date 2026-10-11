@@ -12,14 +12,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Spinner } from '@/components/ui/spinner';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { NumberInput } from '@/components/ui/number-input';
 import { configuracaoService } from '@/services/configuracao.service';
 import { unidadesLaboratoriaisService, categoriasMaterialService, unidadesService } from '@/services/catalogos.service';
-import { UTILIZADOR_TIPO_LABELS } from '@/services/enums';
-import type { UtilizadorTipo } from '@/services/enums';
+import { laboratoriosService } from '@/services/laboratorios.service';
+import { UTILIZADOR_TIPO_LABELS, ACTIVIDADE_TIPO_LABELS } from '@/services/enums';
+import type { UtilizadorTipo, ActividadeTipo } from '@/services/enums';
 import type { FluxoEtapaUpsert } from '@/types/configuracao.types';
 import type { CatalogoGet } from '@/types/catalogo.types';
-import { ALL_ROLES } from '@/utils/roleGuard';
-import { Plus, Trash2, ArrowUp, ArrowDown, FlaskConical, Tags, Ruler, Settings, Circle } from 'lucide-react';
+import type { LaboratorioGet } from '@/types/laboratorio.types';
+import { ALL_ROLES, hasRole } from '@/utils/roleGuard';
+import { useAuth } from '@/context/AuthContext';
+import { Plus, Trash2, ArrowUp, ArrowDown, FlaskConical, Tags, Ruler, Settings, Circle, AlertTriangle } from 'lucide-react';
 
 type CatalogoService = typeof unidadesLaboratoriaisService;
 
@@ -137,7 +141,150 @@ function CatalogoPainel({ titulo, service, icon }: { titulo: string; service: Ca
   );
 }
 
+const TIPOS_LIMITE: ActividadeTipo[] = ['aula', 'visita', 'projecto', 'estagio'];
+
+interface LimiteForm {
+  tipo: ActividadeTipo;
+  min: string;
+  max: string;
+  limite_activo: boolean;
+}
+
+function LimitesParticipantesPainel({ podeEditar }: { podeEditar: boolean }) {
+  const [form, setForm] = useState<LimiteForm[]>([]);
+  const [labs, setLabs] = useState<LaboratorioGet[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [erros, setErros] = useState<Record<string, { min?: string; max?: string }>>({});
+
+  const load = () => {
+    setLoading(true);
+    Promise.all([configuracaoService.getLimites(), laboratoriosService.list()])
+      .then(([rows, ls]) => {
+        setLabs(ls);
+        setForm(
+          TIPOS_LIMITE.map((tipo) => {
+            const r = rows.find((x) => x.tipo === tipo);
+            return { tipo, min: String(r?.min ?? 1), max: String(r?.max ?? 40), limite_activo: r?.limite_activo ?? false };
+          })
+        );
+      })
+      .catch(() => toast.error('Erro ao carregar os limites de participantes'))
+      .finally(() => setLoading(false));
+  };
+  useEffect(() => { load(); }, []);
+
+  const setRow = (tipo: ActividadeTipo, patch: Partial<LimiteForm>) =>
+    setForm((prev) => prev.map((r) => (r.tipo === tipo ? { ...r, ...patch } : r)));
+
+  const validar = (rows: LimiteForm[]) => {
+    const e: Record<string, { min?: string; max?: string }> = {};
+    for (const r of rows) {
+      const min = Number(r.min);
+      const max = Number(r.max);
+      const item: { min?: string; max?: string } = {};
+      if (!Number.isInteger(min) || min < 1) item.min = 'Mínimo ≥ 1';
+      if (!Number.isInteger(max) || max < 1) item.max = 'Máximo ≥ 1';
+      if (!item.min && !item.max && min > max) item.max = 'Máximo ≥ mínimo';
+      if (item.min || item.max) e[r.tipo] = item;
+    }
+    return e;
+  };
+
+  const guardar = async () => {
+    const e = validar(form);
+    setErros(e);
+    if (Object.keys(e).length > 0) {
+      toast.error('Corrija os valores inválidos antes de guardar');
+      return;
+    }
+    setSaving(true);
+    try {
+      await configuracaoService.updateLimites(
+        form.map((r) => ({ id: 0, tipo: r.tipo, min: Number(r.min), max: Number(r.max), limite_activo: r.limite_activo }))
+      );
+      toast.success('Limites de participantes atualizados');
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao guardar os limites');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <Card><CardContent className="p-6"><Spinner /></CardContent></Card>;
+
+  const avisos = form
+    .filter((r) => r.limite_activo)
+    .flatMap((r) => {
+      const min = Number(r.min);
+      if (!Number.isInteger(min) || min < 1) return [];
+      return labs
+        .filter((l) => l.capacidade < min)
+        .map((l) => `${l.nome} (capacidade ${l.capacidade}) abaixo do mínimo de ${ACTIVIDADE_TIPO_LABELS[r.tipo]} (${min})`);
+    });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base"><Settings className="h-4 w-4" /> Limites de Participantes</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          O máximo de cada sessão é o menor entre o valor configurado e a capacidade do laboratório. Quando um tipo está inactivo, o máximo é a capacidade do laboratório e o mínimo é 1.
+        </p>
+        {avisos.length > 0 && (
+          <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800">
+            <p className="mb-1 flex items-center gap-1 font-medium"><AlertTriangle className="h-3.5 w-3.5" /> Laboratórios abaixo do mínimo</p>
+            <ul className="list-disc pl-5">
+              {avisos.map((a) => <li key={a}>{a}</li>)}
+            </ul>
+          </div>
+        )}
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Tipo</TableHead>
+              <TableHead className="w-28">Mínimo</TableHead>
+              <TableHead className="w-28">Máximo</TableHead>
+              <TableHead className="w-32">Activo</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {form.map((r) => (
+              <TableRow key={r.tipo}>
+                <TableCell className="font-medium">{ACTIVIDADE_TIPO_LABELS[r.tipo]}</TableCell>
+                <TableCell>
+                  <NumberInput value={r.min} onValueChange={(v) => setRow(r.tipo, { min: v })} allowDecimal={false} min={1} disabled={!podeEditar} className="w-24" />
+                  {erros[r.tipo]?.min && <p className="mt-1 text-xs text-destructive">{erros[r.tipo].min}</p>}
+                </TableCell>
+                <TableCell>
+                  <NumberInput value={r.max} onValueChange={(v) => setRow(r.tipo, { max: v })} allowDecimal={false} min={1} disabled={!podeEditar} className="w-24" />
+                  {erros[r.tipo]?.max && <p className="mt-1 text-xs text-destructive">{erros[r.tipo].max}</p>}
+                </TableCell>
+                <TableCell>
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <Checkbox checked={r.limite_activo} onCheckedChange={(v) => setRow(r.tipo, { limite_activo: Boolean(v) })} disabled={!podeEditar} />
+                    {r.limite_activo ? 'Activo' : 'Inactivo'}
+                  </label>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+        {podeEditar && (
+          <div className="flex justify-end">
+            <Button onClick={guardar} disabled={saving}>{saving ? <Spinner className="mr-2" /> : null}Guardar limites</Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Configuracao() {
+  const { user } = useAuth();
+  const podeEditar = hasRole(user?.tipo, ['admin']);
   const [etapas, setEtapas] = useState<FluxoEtapaUpsert[]>([]);
   const [fluxoLoading, setFluxoLoading] = useState(true);
   const [savingFluxo, setSavingFluxo] = useState(false);
@@ -232,6 +379,7 @@ export default function Configuracao() {
         <TabsList className="mb-4">
           <TabsTrigger value="fluxo">Fluxo de Aprovação</TabsTrigger>
           <TabsTrigger value="catalogos">Catálogos</TabsTrigger>
+          <TabsTrigger value="limites">Limites de Participantes</TabsTrigger>
         </TabsList>
 
         <TabsContent value="fluxo">
@@ -312,6 +460,10 @@ export default function Configuracao() {
           <CatalogoPainel titulo="Unidades Laboratoriais" icon={FlaskConical} service={unidadesLaboratoriaisService} />
           <CatalogoPainel titulo="Categorias de Material" icon={Tags} service={categoriasMaterialService} />
           <CatalogoPainel titulo="Unidades de Medida" icon={Ruler} service={unidadesService} />
+        </TabsContent>
+
+        <TabsContent value="limites">
+          <LimitesParticipantesPainel podeEditar={podeEditar} />
         </TabsContent>
       </Tabs>
 
