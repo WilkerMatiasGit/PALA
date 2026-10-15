@@ -15,6 +15,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ActividadeUpsertModal } from '@/components/modal/ActividadeUpsertModal';
 import { actividadesService } from '@/services/actividades.service';
 import { laboratoriosService } from '@/services/laboratorios.service';
+import { apiErrorMessage } from '@/services/api';
 import { useAuth } from '@/context/AuthContext';
 import { hasRole } from '@/utils/roleGuard';
 import { ACTIVIDADE_TIPO_OPTIONS, ACTIVIDADE_ESTADO_LABELS } from '@/services/enums';
@@ -112,8 +113,8 @@ export default function ActividadesList() {
                     <TableCell><Badge variant="outline" className={est.className}>{est.label}</Badge></TableCell>
                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-end gap-1">
-                        {canEdit && <Button variant="ghost" size="icon" onClick={() => { setEditing(a); setModalOpen(true); }}><Pencil className="h-4 w-4" /></Button>}
-                        {canEdit && <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(a)}><Trash2 className="h-4 w-4 text-destructive" /></Button>}
+                        {a.pode_editar && <Button variant="ghost" size="icon" onClick={() => { setEditing(a); setModalOpen(true); }}><Pencil className="h-4 w-4" /></Button>}
+                        {a.pode_apagar && <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(a)}><Trash2 className="h-4 w-4 text-destructive" /></Button>}
                         <Button variant="ghost" size="icon" onClick={() => navigate(`/actividades/${a.id}`)}><ChevronRight className="h-4 w-4" /></Button>
                       </div>
                     </TableCell>
@@ -133,7 +134,12 @@ export default function ActividadesList() {
         open={!!deleteTarget} onOpenChange={(v) => !v && setDeleteTarget(null)}
         title="Remover actividade" description={`Pretende remover ${deleteTarget?.nome}?`}
         confirmLabel="Remover" variant="destructive"
-        onConfirm={() => { if (deleteTarget) { actividadesService.remove(deleteTarget.id).then(() => { toast.success('Actividade removida'); setDeleteTarget(null); load(); }); } }}
+        onConfirm={() => {
+          if (!deleteTarget) return;
+          actividadesService.remove(deleteTarget.id)
+            .then(() => { toast.success('Actividade removida'); setDeleteTarget(null); load(); })
+            .catch((err) => toast.error(apiErrorMessage(err)));
+        }}
       />
     </div>
   );

@@ -30,7 +30,7 @@ Decisão que substitui os pontos 1, 2, 3 e 7 acima:
 4. **`num_participantes` desce para `Agendamento`** (obrigatório, `>= 1`), com backfill a partir do valor que estava em `Actividade`. Sessões diferentes da mesma atividade podem ter públicos diferentes.
 5. **`HistoricoMaterial.agendamento_id`** (nullable) substitui `actividade_id`: o consumo passa a ser atribuído à **sessão** que o originou, e não à atividade inteira.
 6. **Atribuição de técnicos por sessão** (✅ E6): o par **validador+assistente** é obrigatório na aprovação do Supervisor (modal no `AprovacaoDetalhe`) e gravado atomicamente em `agendamento_tecnico` (substitui `actividade_tecnico` e `precisa_assistente`). Correcção de sessões aprovadas antigas sem técnicos via `POST /agendamentos/:id/tecnicos` (Admin/Supervisor).
-7. **Edição de atividade recria os agendamentos**: `PUT /actividades/:id/full` faz soft-delete + recria as sessões, logo os agendamentos (e as suas decisões) voltam a `nao_revisto`. O front carrega as sessões existentes antes de submeter para não as perder por omissão.
+7. **Edição de atividade recria os agendamentos**: `PUT /actividades/:id/full` desactiva as sessões activas (`activo=false`, preserva as decisões antigas como histórico) e **recria** novas sessões em `nao_revisto`, logo o fluxo de aprovação volta ao início. Só é permitido (✅ E9) ao **responsável/Admin** e **enquanto nenhuma sessão activa tiver decisão** (ver §2.14). O front carrega as sessões existentes antes de submeter para não as perder por omissão.
 8. **Materiais por sessão** (✅ E7): `AgendamentoMaterial` (`agendamento_id`, `material_id`, `@@unique [agendamento_id, material_id]`) substitui `ActividadeMaterial` — as materiais pedidos passam a ser **por sessão** (relação com `agendamentos`, não com `actividades`); `PUT/atividades/:id/full` recebe-os em `agendamentos[].materiais[]`; a validação de stock agrega a quantidade por material em todos os agendamentos da submissão; removido o endpoint standalone `POST/DELETE /actividade-materiais`. Aplicada com recriação da tabela via `db push --force-reset` (sem migração data-preserving; base re-semeada).
 9. **[A AVALIAR — não implementado] Materiais reutilizáveis / vidraria**: a baixa automática de stock (RF14) desconta todos os `AgendamentoMaterial` da sessão, incluindo itens reutilizáveis (ex.: `vidraria`) que na prática são devolvidos e não consumidos. Decisão actual: **apenas documentar** (ver AGENTS.md §5). Qualquer solução (flag `reutilizavel` na categoria e/ou movimento de devolução) fica por avaliar com feedback real.
 
@@ -358,6 +358,43 @@ Frontend:
 1. Novo `components/ui/number-input.tsx` (`NumberInput`) — wrapper de `Input` que filtra `/[^\d]/` (ou `-`/`.`/`e`/`+`) e expõe `value: string`. Substituir em `ActividadeUpsertModal` (participantes, nº turma, qtd estimada), `MaterialUpsertModal` (mínima, stock inicial), `HistoricoMaterialUpsertModal` (quantidade).
 2. Padrão de erros por campo: componente `FieldError`/`FormField` (Label + Input + `p` erro) e validações derivadas por estado (ex.: turno obrigatório para aula, email com regex, datas fin≥ini, hora_fim>hora_inicio). Ligar nos `*UpsertModal` (começar pelos mais usados: Actividade, Material, Estudante, Utilizador, Curso).
 3. Resolver diferenças de `getStepError` com `onBlur` para mostrar o erro mas deixar prosseguir só se válido.
+
+---
+
+### 2.14. Política de edição/apagamento de atividade e sessões (✅ E9)
+
+> **Estado:** ✅ implementado (E9) — **sem migração**. Centraliza a decisão de *quem**, *quando* e **que campos** podem ser alterados numa atividade e nas suas sessões, e documenta explicitamente o comportamento do `PUT /actividades/:id/full`.
+
+#### Regras (RF08c/08d — ver AGENTS.md §1)
+- **Quem:** só o **responsável** (`actividades.responsavel_id`) ou o **Admin**.
+2. **Quando:** apenas enquanto **nenhuma sessão activa (`activo:true`) tiver decisão registada** (`nao_revisto`/`pendente`). "Deixar pendente" **não** é decisão. `aprovado_dlab`/`aprovado_supervisor`/`rejeitado`/`realizado` bloqueiam. Atividade `rejeitada` **nunca** é editável/apagável. A verificação é feita **dentro da transação** que grava.
+3. **Campos bloqueados** (todos, incluindo Admin): `tipo` e `laboratorio_id` são imutáveis (aceita só o valor actual; 400 se diferir). `responsavel_id` só o Admin altera (não-Admin: 400 se divergir, aceita se igual).
+4. **Códigos:** 403 (não é responsável/Admin) · 409 (já tem decisões, ou `rejeitada`) · 400 (campo bloqueado / lista de sessões vazia).
+5. Aplica-se a `PUT/DELETE /actividades/:id`, `PUT /actividades/:id/full`, `POST /agendamentos`, `PUT/DELETE /agendamentos/:id` e aos upserts `POST /aulas|visitas|projectos|estagios`. `PUT /projectos|estagios/:id/documento` fica **fora** (entrega de documento pós-aprovação).
+6. `DELETE /agendamentos/:id` **bloqueia (409)** remover a última sessão activa e recalcula o estado da atividade após o delete.
+
+**`PUT /actividades/:id/full` recria as sessões:** a edição atómica **desactiva** todas as sessões activas da atividade (`activo=false` — preserva as decisões antigas como histórico) e **cria novas** sessões em `nao_revisto`. É seguro precisamente porque a regra 2 garante que nenhuma sessão activa tinha decisão; o efeito prático é que **editar uma atividade repõe o fluxo de aprovação do zero**. `POST /actividades/full` e `PUT /actividades/:id/full` rejeitam uma lista de agendamentos **vazia** (400).
+
+#### Implementação
+- Backend: `server/src/utils/actividade_permissao.js` (`avaliarAlteracaoActividade`, `podeAlterarActividade`, `alterarComPermissao`, `flagsActividade`) + `toActividadeGet(a, flags)`; flags `pode_editar`/`pode_apagar` em `GET /actividades` e `GET /actividades/:id`.
+- Front: `ActividadesList` usa as flags no lápis/apagar; `ActividadeUpsertModal` desactiva Tipo/Laboratório no modo edição e só o Admin edita o Responsável. (O detalhe de Atividade não tinha botões de editar/apagar.)
+
+#### Como estava antes / o problema
+- Não havia verificação de autoria/estado nos `PUT/DELETE` de atividade e sessões: qualquer utilizador com o cargo base (A,P,C,S,CD) podia editar/apagar a atividade de outro, mesmo já revista, e alterar `tipo`/`laboratorio_id`/`responsavel_id` sem restrição. Editar também repunha silenciosamente as decisões (sessões recriadas) sem aviso nem verificação.
+
+---
+
+### 2.15. Materiais no formulário de atividades — acesso do professor (✅ E10)
+
+> **Estado:** ✅ implementado (E10) — **sem migração** e **sem alterar o RBAC** de `/materiais` (o professor continua sem acesso às rotas gerais).
+
+#### O problema
+O passo «Materiais» do `ActividadeUpsertModal` usava `GET /materiais` (RBAC A,T,C,S,CD) para listar os materiais do laboratório. Para o **professor** devolvia **403**, a lista ficava vazia e mostrava a mensagem enganadora «Selecione um laboratório no passo 1…» — impedindo-o de pedir materiais por sessão (RF08b), embora o professor **não deva** ter acesso às rotas gerais de materiais.
+
+#### Correção (endpoint de leitura mínima dedicado)
+- Novo `GET /materiais/opcoes?laboratorio_id=` (roles = `MAT_ROLES` + `professor`; declarado **antes** de `/:id`). Devolve **só** `{ id, nome, unidade, quantidade, laboratorio_id }` de materiais `activo` (a `quantidade` é o stock actual via `stockActual`). `MAT_ROLES` e todas as outras rotas ficam **inalteradas** — o professor mantém **403** em `GET /materiais`, `GET /materiais/:id`, histórico, escrita e movimentos.
+- Front: `materiaisService.listOpcoes(laboratorioId)` (+ tipo `MaterialOpcao`); o passo «Materiais» usa-o para **todos** os perfis, com `.catch` que mostra o **erro real** em vez da mensagem enganadora. O dashboard e a página `/materiais` não mudam.
+- Verificado: smoke HTTP (professor 200 em `/materiais/opcoes` e 403 nas restantes; outros perfis inalterados; criar/editar com materiais por sessão de ponta a ponta) + browser real (professor vê a lista no passo «Materiais»).
 
 ---
 

@@ -14,6 +14,15 @@ export interface MaterialGet {
   actualizado_em: string;
 }
 
+// Opção mínima devolvida por GET /materiais/opcoes (formulário de actividades).
+export interface MaterialOpcao {
+  id: number;
+  nome: string;
+  unidade: string;
+  quantidade: number;
+  laboratorio_id: number;
+}
+
 export interface MaterialUpsert {
   id?: number;
   laboratorio_id: number;

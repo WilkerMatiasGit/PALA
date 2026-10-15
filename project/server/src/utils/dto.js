@@ -121,7 +121,7 @@ export function toHistoricoGet(h) {
 }
 
 // Recebe Actividade com include { criado_por, responsavel, laboratorio }
-export function toActividadeGet(a) {
+export function toActividadeGet(a, flags) {
   return {
     id: a.id,
     nome: a.nome,
@@ -136,6 +136,7 @@ export function toActividadeGet(a) {
     observacoes: a.observacoes ?? '',
     criado_em: a.criado_em,
     actualizado_em: a.actualizado_em,
+    ...(flags || {}),
   };
 }
 

@@ -9,6 +9,8 @@ const router = Router();
 router.use(authRequired);
 
 const MAT_ROLES = ['admin', 'tecnico', 'coordenador_dlab', 'supervisor', 'chefe_departamento']; // professor SEM acesso a materiais
+// Leitura mínima para o formulário de actividades: só a lista de opções (sem /:id, histórico, escrita ou movimentos).
+const MAT_OPCOES_ROLES = [...MAT_ROLES, 'professor'];
 
 const materialInclude = { laboratorio: true, categoria: true, unidade: true };
 const historicoInclude = { material: true, utilizador: true, agendamento: { include: { actividade: { select: { nome: true } } } } };
@@ -26,6 +28,26 @@ router.get('/', rbac(...MAT_ROLES), async (req, res, next) => {
     if (req.query.estado) where.estado = req.query.estado;
     const rows = await prisma.material.findMany({ where, include: materialInclude, orderBy: { criado_em: 'desc' } });
     res.json(rows.map(toMaterialGet));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /materiais/opcoes — opções para o formulário de actividades (leitura mínima)  [A,T,C,S,CD,P]
+// Declarado antes de /:id para que "opcoes" não seja interpretado como um id.
+router.get('/opcoes', rbac(...MAT_OPCOES_ROLES), async (req, res, next) => {
+  try {
+    const where = { activo: true };
+    if (req.query.laboratorio_id) where.laboratorio_id = Number(req.query.laboratorio_id);
+    const rows = await prisma.material.findMany({ where, include: { unidade: true }, orderBy: { nome: 'asc' } });
+    const opcoes = await Promise.all(rows.map(async (m) => ({
+      id: m.id,
+      nome: m.nome,
+      unidade: m.unidade?.nome ?? '',
+      quantidade: await stockActual(m.id),
+      laboratorio_id: m.laboratorio_id,
+    })));
+    res.json(opcoes);
   } catch (err) {
     next(err);
   }

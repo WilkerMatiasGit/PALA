@@ -17,13 +17,14 @@ import { cursosService } from '@/services/cursos.service';
 import { materiaisService } from '@/services/materiais.service';
 import { agendamentosService } from '@/services/agendamentos.service';
 import { configuracaoService } from '@/services/configuracao.service';
+import { apiErrorMessage } from '@/services/api';
 import { ACTIVIDADE_TIPO_OPTIONS, TURNO_TIPO_OPTIONS } from '@/services/enums';
-import type { ActividadeGet, ActividadeUpsert, ActividadeFullUpsert } from '@/types/actividade.types';
+import type { ActividadeGet, ActividadeUpsert, ActividadeFullUpsert, AulaGet, VisitaGet, ProjectoGet, EstagioGet } from '@/types/actividade.types';
 import type { LimiteParticipantesGet } from '@/types/configuracao.types';
 import type { LaboratorioGet } from '@/types/laboratorio.types';
 import type { UtilizadorGet } from '@/types/utilizador.types';
 import type { CursoDisciplinaGet } from '@/types/disciplina.types';
-import type { MaterialGet } from '@/types/material.types';
+import type { MaterialOpcao } from '@/types/material.types';
 import type { AgendamentoGet } from '@/types/agendamento.types';
 import type { EstudanteGet } from '@/types/estudantes.types';
 import type { ActividadeTipo } from '@/services/enums';
@@ -62,6 +63,14 @@ const toISODate = (d: Date): string => {
   return `${y}-${m}-${day}`;
 };
 
+// Converte uma data ISO (vinda do backend, ex.: "2026-08-15T00:00:00.000Z") no
+// formato aceite pelo <input type="date"> (yyyy-mm-dd), sem deslocação de fuso.
+const toDateInput = (v: string | Date | null | undefined): string => {
+  if (!v) return '';
+  const s = typeof v === 'string' ? v : v.toISOString();
+  return s.slice(0, 10);
+};
+
 const hojeISO = (): string => {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -80,7 +89,8 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
   const [labs, setLabs] = useState<LaboratorioGet[]>([]);
   const [users, setUsers] = useState<UtilizadorGet[]>([]);
   const [cursoDisciplinas, setCursoDisciplinas] = useState<CursoDisciplinaGet[]>([]);
-  const [materiais, setMateriais] = useState<MaterialGet[]>([]);
+  const [materiais, setMateriais] = useState<MaterialOpcao[]>([]);
+  const [materiaisErro, setMateriaisErro] = useState('');
   const [existingAgendamentos, setExistingAgendamentos] = useState<AgendamentoGet[]>([]);
   const [estudantes, setEstudantes] = useState<EstudanteGet[]>([]);
   const [limites, setLimites] = useState<LimiteParticipantesGet[]>([]);
@@ -94,6 +104,9 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
 
   // Quem não é professor escolhe o responsável; para "aula" só professores.
   const isProf = user?.tipo === 'professor';
+  const isAdmin = user?.tipo === 'admin';
+  // Em edição: tipo e laboratório ficam bloqueados (regra 3); o responsável só o Admin altera.
+  const isEdit = !!actividade;
   const responsavelOptions = users.filter((u) => {
     if (tipo === 'aula') return u.tipo === 'professor';
     return u.tipo === 'professor' || (user ? u.id === user.id : false);
@@ -132,15 +145,26 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
 
   useEffect(() => {
     if (labId) {
-      materiaisService.list({ laboratorio_id: Number(labId) }).then(setMateriais);
+      setMateriaisErro('');
+      // Endpoint de leitura mínima (acessível também a professores); devolve só as opções
+      // necessárias ao formulário. Em caso de erro, mostra a mensagem real ao utilizador.
+      materiaisService.listOpcoes(Number(labId))
+        .then(setMateriais)
+        .catch((err) => { setMateriais([]); setMateriaisErro(apiErrorMessage(err)); });
       agendamentosService.list({ laboratorio_id: Number(labId) }).then(setExistingAgendamentos);
     } else {
       setMateriais([]);
+      setMateriaisErro('');
       setExistingAgendamentos([]);
     }
   }, [labId]);
 
-  const resetForm = () => {
+  // Ao abrir o modal: repõe o formulário e, em edição, pré-preenche TODOS os campos.
+  // Nota: o preenchimento não pode viver no `onOpenChange` do Radix — este só é
+  // disparado em interações internas (ex.: fechar), nunca quando o `open` é
+  // controlado pelo componente pai (`setModalOpen(true)`). Daí o `useEffect` sobre `open`.
+  useEffect(() => {
+    if (!open) return;
     setStep(1);
     setNome(''); setLabId(''); setTipo('aula');
     setObservacoes(''); setResponsavelId('');
@@ -148,42 +172,78 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
     setNomeVisitante(''); setInstituicao(''); setTelefone(''); setEmailVisitante('');
     setTitulo(''); setDescricao(''); setDataInicio(''); setDataFim(''); setEstudanteId('');
     setAgendamentos([blocoVazio()]);
-  };
 
-  const handleOpenChange = (v: boolean) => {
-    if (v) {
-      resetForm();
-      if (actividade) {
-        setNome(actividade.nome); setLabId(String(actividade.laboratorio_id));
-        setTipo(actividade.tipo);
-        setObservacoes(actividade.observacoes);
-        setResponsavelId(String(actividade.responsavel_id));
-        // O PUT /:id/full substitui os agendamentos — é preciso carregar os atuais e os seus materiais.
-        Promise.all([
-          agendamentosService.listByActividade(actividade.id),
-          actividadesService.listMateriais(actividade.id).catch(() => []),
-        ]).then(([ags, mats]) => {
-          if (ags.length === 0) return;
-          setAgendamentos(
-            ags.map((g) => {
-              const inicio = new Date(g.hora_inicio);
-              const fim = new Date(g.hora_fim);
-              return {
-                data: toISODate(inicio),
-                hora_inicio: `${String(inicio.getHours()).padStart(2, '0')}:${String(inicio.getMinutes()).padStart(2, '0')}`,
-                hora_fim: `${String(fim.getHours()).padStart(2, '0')}:${String(fim.getMinutes()).padStart(2, '0')}`,
-                num_participantes: String(g.num_participantes ?? 1),
-                materiais: mats
-                  .filter((m) => m.agendamento_id === g.id)
-                  .map((m) => ({ material_id: m.material_id, quantidade_estimada: m.quantidade_estimada })),
-              };
-            })
-          );
-        }).catch(() => setAgendamentos([blocoVazio()]));
+    if (!actividade) return;
+    setNome(actividade.nome);
+    setLabId(String(actividade.laboratorio_id));
+    setTipo(actividade.tipo);
+    setObservacoes(actividade.observacoes ?? '');
+    setResponsavelId(String(actividade.responsavel_id));
+
+    let cancelled = false;
+    const detalhesReq =
+      actividade.tipo === 'aula'
+        ? actividadesService.getAula(actividade.id)
+        : actividade.tipo === 'visita'
+          ? actividadesService.getVisita(actividade.id)
+          : actividade.tipo === 'projecto'
+            ? actividadesService.getProjecto(actividade.id)
+            : actividadesService.getEstagio(actividade.id);
+
+    // O PUT /:id/full substitui os agendamentos — é preciso carregar os atuais e os seus materiais.
+    Promise.all([
+      agendamentosService.listByActividade(actividade.id),
+      actividadesService.listMateriais(actividade.id).catch(() => []),
+      detalhesReq.catch(() => null),
+    ]).then(([ags, mats, det]) => {
+      if (cancelled) return;
+      if (det) {
+        if (actividade.tipo === 'aula') {
+          const d = det as AulaGet;
+          setCursoDisciplinaId(d.curso_disciplina_id ? String(d.curso_disciplina_id) : '');
+          setTema(d.tema ?? '');
+          setTurno(d.turno ?? '');
+          setNumeroTurma(d.numero_turma != null ? String(d.numero_turma) : '');
+        } else if (actividade.tipo === 'visita') {
+          const d = det as VisitaGet;
+          setNomeVisitante(d.nome_visitante ?? '');
+          setInstituicao(d.instituicao ?? '');
+          setTelefone(d.telefone ?? '');
+          setEmailVisitante(d.email ?? '');
+        } else if (actividade.tipo === 'projecto') {
+          const d = det as ProjectoGet;
+          setTitulo(d.titulo ?? '');
+          setDescricao(d.descricao ?? '');
+          setDataInicio(toDateInput(d.data_inicio));
+          setDataFim(toDateInput(d.data_fim));
+        } else {
+          const d = det as EstagioGet;
+          setEstudanteId(d.estudante_id ? String(d.estudante_id) : '');
+          setDataInicio(toDateInput(d.data_inicio));
+          setDataFim(toDateInput(d.data_fim));
+        }
       }
-    }
-    onOpenChange(v);
-  };
+      if (ags.length === 0) return;
+      setAgendamentos(
+        ags.map((g) => {
+          const inicio = new Date(g.hora_inicio);
+          const fim = new Date(g.hora_fim);
+          return {
+            data: toISODate(inicio),
+            hora_inicio: `${String(inicio.getHours()).padStart(2, '0')}:${String(inicio.getMinutes()).padStart(2, '0')}`,
+            hora_fim: `${String(fim.getHours()).padStart(2, '0')}:${String(fim.getMinutes()).padStart(2, '0')}`,
+            num_participantes: String(g.num_participantes ?? 1),
+            materiais: mats
+              .filter((m) => m.agendamento_id === g.id)
+              .map((m) => ({ material_id: m.material_id, quantidade_estimada: m.quantidade_estimada })),
+          };
+        })
+      );
+    }).catch(() => setAgendamentos([blocoVazio()]));
+    return () => { cancelled = true; };
+  }, [open, actividade]);
+
+  const handleOpenChange = (v: boolean) => onOpenChange(v);
 
   const getStepError = (s: number): string | null => {
     if (s === 1) return (!nome || !labId) ? 'Preencha o nome e o laboratório' : null;
@@ -339,7 +399,7 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
       onSaved();
       onOpenChange(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erro ao guardar actividade');
+      toast.error(apiErrorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -352,6 +412,23 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
   const turmaPreview = selectedCd && turno && numeroTurma && Number(numeroTurma) > 0
     ? `${selectedCd.curso_abreviacao}_${turno === 'manha' ? 'M' : 'T'}${numeroTurma}`
     : '';
+
+  // O Radix só mostra o item selecionado no trigger se o dropdown já tiver sido aberto
+  // (o texto do item é portalado para o value node nesse momento). Em edição os valores
+  // são definidos programaticamente e o dropdown nunca abre — daí passarmos o rótulo
+  // explicitamente como children de <SelectValue> (API suportada pelo Radix).
+  const labLabel = labs.find((l) => String(l.id) === labId)?.nome ?? '';
+  const tipoLabel = ACTIVIDADE_TIPO_OPTIONS.find((o) => o.value === tipo)?.label ?? '';
+  const responsavelLabel = users.find((u) => String(u.id) === responsavelId)?.nome ?? '';
+  const turnoLabel = TURNO_TIPO_OPTIONS.find((o) => o.value === turno)?.label ?? '';
+  const cdLabel = (cd: CursoDisciplinaGet) =>
+    `${cd.disciplina_nome} (${cd.curso_nome} - ${semestreToAno(cd.semestre)}º Ano · ${semestreNoAno(cd.semestre)}º Sem)`;
+  const disciplinaLabel = selectedCd ? cdLabel(selectedCd) : '';
+  const estudanteLabel = estudantes.find((e) => String(e.id) === estudanteId)?.nome ?? '';
+  const materialLabel = (id: number | string) => {
+    const m = materiais.find((x) => String(x.id) === String(id));
+    return m ? `${m.nome} (${m.quantidade} ${m.unidade})` : '';
+  };
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -382,17 +459,19 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Laboratório</Label>
-                <Select value={labId} onValueChange={setLabId}>
-                  <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                <Select value={labId} onValueChange={setLabId} disabled={isEdit}>
+                  <SelectTrigger><SelectValue placeholder="Selecionar...">{labLabel}</SelectValue></SelectTrigger>
                   <SelectContent>{labs.map((l) => <SelectItem key={l.id} value={String(l.id)}>{l.nome}</SelectItem>)}</SelectContent>
                 </Select>
+                {isEdit && <p className="text-xs text-muted-foreground">O laboratório não pode ser alterado.</p>}
               </div>
               <div className="space-y-2">
                 <Label>Tipo</Label>
-                <Select value={tipo} onValueChange={(v) => setTipo(v as ActividadeTipo)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Select value={tipo} onValueChange={(v) => setTipo(v as ActividadeTipo)} disabled={isEdit}>
+                  <SelectTrigger><SelectValue>{tipoLabel}</SelectValue></SelectTrigger>
                   <SelectContent>{ACTIVIDADE_TIPO_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
                 </Select>
+                {isEdit && <p className="text-xs text-muted-foreground">O tipo não pode ser alterado.</p>}
               </div>
             </div>
             <div className="space-y-2">
@@ -406,11 +485,27 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
         {step === 2 && (
           <div className="space-y-4">
             <Badge variant="secondary">{ACTIVIDADE_TIPO_OPTIONS.find((o) => o.value === tipo)?.label}</Badge>
-            {!isProf ? (
+            {isEdit ? (
+              isAdmin ? (
+                <div className="space-y-2">
+                  <Label htmlFor="act-responsavel">Responsável da atividade</Label>
+                  <Select value={responsavelId} onValueChange={setResponsavelId}>
+                    <SelectTrigger id="act-responsavel"><SelectValue placeholder="Selecionar...">{responsavelLabel}</SelectValue></SelectTrigger>
+                    <SelectContent>{responsavelOptions.map((u) => <SelectItem key={u.id} value={String(u.id)}>{u.nome}</SelectItem>)}</SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Só o Admin pode alterar o responsável.</p>
+                </div>
+              ) : (
+                <div className="rounded-md border px-3 py-2 text-sm">
+                  <span className="text-muted-foreground">Responsável: </span>
+                  <span className="font-medium">{actividade?.responsavel_nome}</span>
+                </div>
+              )
+            ) : !isProf ? (
               <div className="space-y-2">
                 <Label htmlFor="act-responsavel">Responsável da atividade</Label>
                 <Select value={responsavelId} onValueChange={setResponsavelId}>
-                  <SelectTrigger id="act-responsavel"><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                  <SelectTrigger id="act-responsavel"><SelectValue placeholder="Selecionar...">{responsavelLabel}</SelectValue></SelectTrigger>
                   <SelectContent>{responsavelOptions.map((u) => <SelectItem key={u.id} value={String(u.id)}>{u.nome}</SelectItem>)}</SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
@@ -427,8 +522,8 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
                 <div className="space-y-2">
                   <Label>Disciplina (Curso-Disciplina)</Label>
                   <Select value={cursoDisciplinaId} onValueChange={setCursoDisciplinaId}>
-                    <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
-                    <SelectContent>{cursoDisciplinas.map((cd) => <SelectItem key={cd.id} value={String(cd.id)}>{cd.disciplina_nome} ({cd.curso_nome} - {semestreToAno(cd.semestre)}º Ano · {semestreNoAno(cd.semestre)}º Sem)</SelectItem>)}</SelectContent>
+                    <SelectTrigger><SelectValue placeholder="Selecionar...">{disciplinaLabel}</SelectValue></SelectTrigger>
+                    <SelectContent>{cursoDisciplinas.map((cd) => <SelectItem key={cd.id} value={String(cd.id)}>{cdLabel(cd)}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 {aulaAno != null && (
@@ -441,7 +536,7 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
                   <div className="space-y-2">
                     <Label>Turno</Label>
                     <Select value={turno} onValueChange={setTurno}>
-                      <SelectTrigger><SelectValue placeholder="Selecionar turno..." /></SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder="Selecionar turno...">{turnoLabel}</SelectValue></SelectTrigger>
                       <SelectContent>{TURNO_TIPO_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
@@ -508,7 +603,7 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
                   <div className="space-y-2">
                     <Label>Estudante</Label>
                     <Select value={estudanteId} onValueChange={setEstudanteId}>
-                      <SelectTrigger><SelectValue placeholder="Selecionar estudante..." /></SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder="Selecionar estudante...">{estudanteLabel}</SelectValue></SelectTrigger>
                       <SelectContent>
                         {estudantes.map((est) => <SelectItem key={est.id} value={String(est.id)}>{est.nome} ({est.id})</SelectItem>)}
                       </SelectContent>
@@ -586,11 +681,17 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
         {step === 4 && (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">Selecione os materiais do laboratório e a quantidade estimada por sessão (opcional).</p>
-            {materiais.length === 0 ? (
+            {materiaisErro ? (
+              <p className="rounded-md border border-destructive/50 bg-destructive/10 p-2 text-sm text-destructive">
+                Não foi possível carregar os materiais: {materiaisErro}
+              </p>
+            ) : !labId ? (
               <div className="flex flex-col items-center justify-center py-8 text-center">
                 <ClipboardList className="h-10 w-10 text-muted-foreground" />
                 <p className="mt-2 text-sm text-muted-foreground">Selecione um laboratório no passo 1 para ver os materiais disponíveis.</p>
               </div>
+            ) : materiais.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Este laboratório não tem materiais registados.</p>
             ) : agendamentos.filter((a) => a.data && a.hora_inicio && a.hora_fim).length === 0 ? (
               <p className="text-sm text-muted-foreground">Adicione sessões no passo anterior para lhes associar materiais.</p>
             ) : (
@@ -604,11 +705,11 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
                         <div key={j} className="flex items-end gap-2">
                           <div className="flex-1 space-y-1">
                             <Label className="text-xs">Material</Label>
-                            <Select value={String(mr.material_id)} onValueChange={(v) => {
+                            <Select value={mr.material_id > 0 ? String(mr.material_id) : ''} onValueChange={(v) => {
                               const copy = [...agendamentos]; copy[i].materiais[j].material_id = Number(v); setAgendamentos(copy);
                             }}>
-                              <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
-                              <SelectContent>{materiais.map((m) => <SelectItem key={m.id} value={String(m.id)}>{m.nome} ({m.quantidade} {m.unidade})</SelectItem>)}</SelectContent>
+                              <SelectTrigger><SelectValue placeholder="Selecionar...">{materialLabel(mr.material_id)}</SelectValue></SelectTrigger>
+                              <SelectContent>{materiais.map((m) => <SelectItem key={m.id} value={String(m.id)}>{materialLabel(m.id)}</SelectItem>)}</SelectContent>
                             </Select>
                           </div>
                           <div className="w-24 space-y-1">

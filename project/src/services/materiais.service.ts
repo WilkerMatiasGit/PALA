@@ -1,9 +1,15 @@
 import { api, apiErrorMessage } from './api';
-import type { MaterialGet, MaterialUpsert } from '@/types/material.types';
+import type { MaterialGet, MaterialOpcao, MaterialUpsert } from '@/types/material.types';
 
 export const materiaisService = {
   async list(filters?: { laboratorio_id?: number; categoria?: string; estado?: string }): Promise<MaterialGet[]> {
     const { data } = await api.get<MaterialGet[]>('/materiais', { params: filters });
+    return data;
+  },
+
+  // Opções mínimas para o formulário de actividades (acessível também a professores).
+  async listOpcoes(laboratorioId: number): Promise<MaterialOpcao[]> {
+    const { data } = await api.get<MaterialOpcao[]>('/materiais/opcoes', { params: { laboratorio_id: laboratorioId } });
     return data;
   },
 

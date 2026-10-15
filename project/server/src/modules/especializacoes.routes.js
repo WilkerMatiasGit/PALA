@@ -7,6 +7,7 @@ import {
   toProjectoGet,
   toEstagioGet,
 } from '../utils/dto.js';
+import { alterarComPermissao } from '../utils/actividade_permissao.js';
 
 const ACT_ROLES = ['admin', 'professor', 'coordenador_dlab', 'supervisor', 'chefe_departamento'];
 
@@ -26,7 +27,10 @@ aulas.post('/', rbac(...ACT_ROLES), async (req, res, next) => {
     const normTurno = turno === 'manha' || turno === 'tarde' ? turno : null;
     const normNumero = Number.isInteger(numero_turma) ? numero_turma : Number(numero_turma);
     const finalNumero = Number.isInteger(normNumero) && normNumero > 0 ? normNumero : null;
-    const result = await prisma.aula.upsert({
+    const act = await prisma.actividade.findUnique({ where: { id: Number(actividade_id) } });
+    if (!act || !act.activo) return res.status(404).json({ message: 'Atividade não encontrada' });
+    // Regras 1 (estado) + 2 (autoria).
+    const result = await alterarComPermissao(act, req.user, (tx) => tx.aula.upsert({
       where: { actividade_id: Number(actividade_id) },
       update: {
         curso_disciplina_id: Number(curso_disciplina_id),
@@ -42,9 +46,10 @@ aulas.post('/', rbac(...ACT_ROLES), async (req, res, next) => {
         numero_turma: finalNumero,
       },
       include: cdInclude,
-    });
+    }));
     res.status(200).json(toAulaGet(result));
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ message: err.message });
     next(err);
   }
 });
@@ -61,7 +66,10 @@ visitas.post('/', rbac(...ACT_ROLES), async (req, res, next) => {
     if (!actividade_id || !nome_visitante || !telefone || !email) {
       return res.status(400).json({ message: 'actividade_id, nome_visitante, telefone e email são obrigatórios' });
     }
-    const result = await prisma.visita.upsert({
+    const act = await prisma.actividade.findUnique({ where: { id: Number(actividade_id) } });
+    if (!act || !act.activo) return res.status(404).json({ message: 'Atividade não encontrada' });
+    // Regras 1 (estado) + 2 (autoria).
+    const result = await alterarComPermissao(act, req.user, (tx) => tx.visita.upsert({
       where: { actividade_id: Number(actividade_id) },
       update: {
         nome_visitante,
@@ -76,9 +84,10 @@ visitas.post('/', rbac(...ACT_ROLES), async (req, res, next) => {
         telefone,
         email,
       },
-    });
+    }));
     res.status(200).json(toVisitaGet(result));
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ message: err.message });
     next(err);
   }
 });
@@ -95,7 +104,10 @@ projectos.post('/', rbac(...ACT_ROLES), async (req, res, next) => {
     if (!actividade_id || !titulo || !data_inicio || !data_fim) {
       return res.status(400).json({ message: 'actividade_id, titulo, data_inicio e data_fim são obrigatórios' });
     }
-    const result = await prisma.projecto.upsert({
+    const act = await prisma.actividade.findUnique({ where: { id: Number(actividade_id) } });
+    if (!act || !act.activo) return res.status(404).json({ message: 'Atividade não encontrada' });
+    // Regras 1 (estado) + 2 (autoria).
+    const result = await alterarComPermissao(act, req.user, (tx) => tx.projecto.upsert({
       where: { actividade_id: Number(actividade_id) },
       update: {
         titulo,
@@ -110,9 +122,10 @@ projectos.post('/', rbac(...ACT_ROLES), async (req, res, next) => {
         data_inicio: new Date(data_inicio),
         data_fim: new Date(data_fim),
       },
-    });
+    }));
     res.status(200).json(toProjectoGet(result));
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ message: err.message });
     next(err);
   }
 });
@@ -146,7 +159,10 @@ estagios.post('/', rbac(...ACT_ROLES), async (req, res, next) => {
     if (!actividade_id || !estudante_id || !data_inicio || !data_fim) {
       return res.status(400).json({ message: 'actividade_id, estudante_id, data_inicio e data_fim são obrigatórios' });
     }
-    const result = await prisma.estagio.upsert({
+    const act = await prisma.actividade.findUnique({ where: { id: Number(actividade_id) } });
+    if (!act || !act.activo) return res.status(404).json({ message: 'Atividade não encontrada' });
+    // Regras 1 (estado) + 2 (autoria).
+    const result = await alterarComPermissao(act, req.user, (tx) => tx.estagio.upsert({
       where: { actividade_id: Number(actividade_id) },
       update: {
         estudante_id: Number(estudante_id),
@@ -160,9 +176,10 @@ estagios.post('/', rbac(...ACT_ROLES), async (req, res, next) => {
         data_fim: new Date(data_fim),
       },
       include: { estudante: true },
-    });
+    }));
     res.status(200).json(toEstagioGet(result));
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ message: err.message });
     next(err);
   }
 });

@@ -11,6 +11,11 @@ import {
   toAgendamentoGet,
 } from '../utils/dto.js';
 import { validarSessao } from '../utils/validarSessao.js';
+import {
+  podeAlterarActividade,
+  alterarComPermissao,
+  flagsActividade,
+} from '../utils/actividade_permissao.js';
 
 const router = Router();
 router.use(authRequired);
@@ -18,8 +23,12 @@ const ACT_ROLES = ['admin', 'professor', 'coordenador_dlab', 'supervisor', 'chef
 
 const actInclude = { criado_por: true, responsavel: true, laboratorio: true };
 
-// Roles que podem designar um terceiro como responsável (RF02 + regra de responsabilidade)
-const PODE_DESIGNAR = ['admin', 'coordenador_dlab', 'supervisor', 'chefe_departamento'];
+// include das listagens/detalhe: junta a contagem de sessões activas já revistas
+// (com decisão) para calcular `pode_editar`/`pode_apagar` sem N consultas.
+const actIncludeFlags = {
+  ...actInclude,
+  _count: { select: { agendamentos: { where: { activo: true, decisoes: { some: {} } } } } },
+};
 
 // Regra de responsabilidade:
 //  - o autor (criado_por_id) é sempre o utilizador autenticado;
@@ -57,8 +66,8 @@ router.get('/', async (req, res, next) => {
     } else if (req.user.tipo === 'tecnico') {
       where.agendamentos = { some: { activo: true, tecnicos: { some: { activo: true, utilizador_id: req.user.id } } } };
     }
-    const rows = await prisma.actividade.findMany({ where, include: actInclude, orderBy: { criado_em: 'desc' } });
-    res.json(rows.map(toActividadeGet));
+    const rows = await prisma.actividade.findMany({ where, include: actIncludeFlags, orderBy: { criado_em: 'desc' } });
+    res.json(rows.map((a) => toActividadeGet(a, flagsActividade(a, req.user, a._count.agendamentos > 0))));
   } catch (err) {
     next(err);
   }
@@ -67,9 +76,9 @@ router.get('/', async (req, res, next) => {
 // GET /actividades/:id
 router.get('/:id', async (req, res, next) => {
   try {
-    const a = await prisma.actividade.findFirst({ where: { id: Number(req.params.id), activo: true }, include: actInclude });
+    const a = await prisma.actividade.findFirst({ where: { id: Number(req.params.id), activo: true }, include: actIncludeFlags });
     if (!a) return res.status(404).json({ message: 'Atividade não encontrada' });
-    res.json(toActividadeGet(a));
+    res.json(toActividadeGet(a, flagsActividade(a, req.user, a._count.agendamentos > 0)));
   } catch (err) {
     next(err);
   }
@@ -105,23 +114,41 @@ router.post('/', rbac(...ACT_ROLES), async (req, res, next) => {
 router.put('/:id', rbac(...ACT_ROLES), async (req, res, next) => {
   try {
     const a = await prisma.actividade.findUnique({ where: { id: Number(req.params.id) } });
-    if (!a) return res.status(404).json({ message: 'Atividade não encontrada' });
+    if (!a || !a.activo) return res.status(404).json({ message: 'Atividade não encontrada' });
+
+    // Regras 1 (estado) + 2 (autoria): só o responsável/Admin, e só sem sessões revistas.
+    const perm = await podeAlterarActividade(a, req.user);
+    if (!perm.ok) return res.status(perm.status).json({ message: perm.motivo });
+
     const { nome, responsavel_id, laboratorio_id, observacoes, tipo } = req.body || {};
+
+    // Regra 3: tipo e laboratório são imutáveis (mesmo para o Admin). Aceita-se
+    // reenviar o valor actual; qualquer alteração é rejeitada com 400.
+    if (tipo !== undefined && tipo !== a.tipo) {
+      return res.status(400).json({ message: 'O tipo de uma atividade não pode ser alterado.' });
+    }
+    if (laboratorio_id !== undefined && Number(laboratorio_id) !== a.laboratorio_id) {
+      return res.status(400).json({ message: 'O laboratório de uma atividade não pode ser alterado.' });
+    }
+
     const data = {};
     if (nome !== undefined) data.nome = nome;
-    if (laboratorio_id !== undefined) data.laboratorio_id = Number(laboratorio_id);
     if (observacoes !== undefined) data.observacoes = observacoes;
-    if (tipo !== undefined) data.tipo = tipo;
-    // o responsável apenas pode ser alterado por quem pode designar terceiros
-    if (responsavel_id !== undefined && PODE_DESIGNAR.includes(req.user.tipo)) {
-      const novoTipo = tipo || a.tipo;
-      data.responsavel_id = await resolverResponsavel(req, { responsavel_id }, novoTipo);
-    } else if (req.user.tipo === 'professor') {
-      data.responsavel_id = req.user.id;
+    // Regra 3: só o Admin altera o responsável; para os restantes, aceitar só o valor actual.
+    if (responsavel_id !== undefined) {
+      if (req.user.tipo === 'admin') {
+        data.responsavel_id = await resolverResponsavel(req, { responsavel_id }, a.tipo);
+      } else if (Number(responsavel_id) !== a.responsavel_id) {
+        return res.status(400).json({ message: 'Apenas um administrador pode alterar o responsável pela atividade.' });
+      }
     }
-    const atualizado = await prisma.actividade.update({ where: { id: a.id }, data, include: actInclude });
+
+    const atualizado = await alterarComPermissao(a, req.user, (tx) =>
+      tx.actividade.update({ where: { id: a.id }, data, include: actInclude }),
+    );
     res.json(toActividadeGet(atualizado));
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ message: err.message });
     next(err);
   }
 });
@@ -306,6 +333,9 @@ router.post('/full', rbac(...ACT_ROLES), async (req, res, next) => {
 
     const respId = await resolverResponsavel(req, { responsavel_id }, tipo);
     const ags = (agendamentos || []).filter((g) => g && g.hora_inicio && g.hora_fim);
+    if (ags.length === 0) {
+      return res.status(400).json({ message: 'A atividade tem de ter pelo menos uma sessão.' });
+    }
     const mats = aplanarMateriais(ags);
 
     const spe = montarDetalhes(tipo, detalhes);
@@ -344,25 +374,39 @@ router.put('/:id/full', rbac(...ACT_ROLES), async (req, res, next) => {
     const act = await prisma.actividade.findUnique({ where: { id: Number(req.params.id) } });
     if (!act || !act.activo) return res.status(404).json({ message: 'Atividade não encontrada' });
 
+    // Regras 1 (estado) + 2 (autoria): só o responsável/Admin, e só sem sessões revistas.
+    const perm = await podeAlterarActividade(act, req.user);
+    if (!perm.ok) return res.status(perm.status).json({ message: perm.motivo });
+
     const { nome, responsavel_id, laboratorio_id, observacoes, tipo, detalhes, agendamentos } = req.body || {};
-    const novoTipo = tipo || act.tipo;
-    const novoLabId = laboratorio_id != null ? Number(laboratorio_id) : act.laboratorio_id;
-    if (!['aula', 'visita', 'projecto', 'estagio'].includes(novoTipo)) {
-      return res.status(400).json({ message: 'tipo inválido' });
+
+    // Regra 3: tipo e laboratório são imutáveis (mesmo para o Admin). Aceita-se
+    // reenviar o valor actual; qualquer alteração é rejeitada com 400.
+    if (tipo !== undefined && tipo !== act.tipo) {
+      return res.status(400).json({ message: 'O tipo de uma atividade não pode ser alterado.' });
     }
+    if (laboratorio_id !== undefined && Number(laboratorio_id) !== act.laboratorio_id) {
+      return res.status(400).json({ message: 'O laboratório de uma atividade não pode ser alterado.' });
+    }
+    const novoTipo = act.tipo;
+    const novoLabId = act.laboratorio_id;
     const lab = await prisma.laboratorio.findUnique({ where: { id: novoLabId } });
     if (!lab || !lab.activo) return res.status(404).json({ message: 'Laboratório não encontrado' });
 
-    // responsável: alterar apenas se enviado e o utilizador puder designar terceiros;
-    // professor mantém-se (ou volta) como responsável da própria atividade.
+    // Regra 3: só o Admin altera o responsável; os restantes só podem reenviar o actual.
     let respId;
-    if (responsavel_id !== undefined && PODE_DESIGNAR.includes(req.user.tipo)) {
-      respId = await resolverResponsavel(req, { responsavel_id }, novoTipo);
-    } else if (req.user.tipo === 'professor') {
-      respId = req.user.id;
+    if (responsavel_id !== undefined) {
+      if (req.user.tipo === 'admin') {
+        respId = await resolverResponsavel(req, { responsavel_id }, novoTipo);
+      } else if (Number(responsavel_id) !== act.responsavel_id) {
+        return res.status(400).json({ message: 'Apenas um administrador pode alterar o responsável pela atividade.' });
+      }
     }
 
     const ags = (agendamentos || []).filter((g) => g && g.hora_inicio && g.hora_fim);
+    if (ags.length === 0) {
+      return res.status(400).json({ message: 'A atividade tem de ter pelo menos uma sessão.' });
+    }
     const mats = aplanarMateriais(ags);
 
     await validarAgendamentos(novoLabId, ags, act.id);
@@ -372,15 +416,16 @@ router.put('/:id/full', rbac(...ACT_ROLES), async (req, res, next) => {
     const data = {};
     if (nome !== undefined) data.nome = nome;
     if (respId !== undefined) data.responsavel_id = respId;
-    if (laboratorio_id !== undefined) data.laboratorio_id = Number(laboratorio_id);
     if (observacoes !== undefined) data.observacoes = observacoes;
-    if (tipo !== undefined) data.tipo = tipo;
 
-    const atualizado = await prisma.$transaction(async (tx) => {
+    // Nota (AGENTS.md §4.5 / PLANO.md §0.1 ponto 7): a edição RECRIA as sessões —
+    // as antigas são desactivadas e criam-se novas em `nao_revisto`. Só é possível
+    // porque a regra 1 garante que nenhuma sessão activa tem decisão registada.
+    const atualizado = await alterarComPermissao(act, req.user, async (tx) => {
       const up = await tx.actividade.update({ where: { id: act.id }, data, include: actInclude });
       const spe = montarDetalhes(novoTipo, detalhes);
       if (spe) await actualizarEspecialidade(tx, novoTipo, act.id, spe);
-await tx.agendamento.updateMany({ where: { actividade_id: act.id, activo: true }, data: { activo: false } });
+      await tx.agendamento.updateMany({ where: { actividade_id: act.id, activo: true }, data: { activo: false } });
       await crearAgendamentos(tx, act.id, ags);
       return up;
     });
@@ -395,10 +440,18 @@ await tx.agendamento.updateMany({ where: { actividade_id: act.id, activo: true }
 router.delete('/:id', rbac(...ACT_ROLES), async (req, res, next) => {
   try {
     const a = await prisma.actividade.findUnique({ where: { id: Number(req.params.id) } });
-    if (!a) return res.status(404).json({ message: 'Atividade não encontrada' });
-    await prisma.actividade.update({ where: { id: a.id }, data: { activo: false } });
+    if (!a || !a.activo) return res.status(404).json({ message: 'Atividade não encontrada' });
+
+    // Regras 1 (estado) + 2 (autoria).
+    const perm = await podeAlterarActividade(a, req.user);
+    if (!perm.ok) return res.status(perm.status).json({ message: perm.motivo });
+
+    await alterarComPermissao(a, req.user, (tx) =>
+      tx.actividade.update({ where: { id: a.id }, data: { activo: false } }),
+    );
     res.json({ message: 'Atividade removida' });
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ message: err.message });
     next(err);
   }
 });

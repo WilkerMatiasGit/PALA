@@ -5,6 +5,12 @@ import { recomputeMaterial } from '../utils/stock.js';
 import { toAgendamentoGet } from '../utils/dto.js';
 import { recalcularEstadoActividade } from '../utils/actividade_estado.js';
 import { validarSessao } from '../utils/validarSessao.js';
+import {
+  podeAlterarActividade,
+  alterarComPermissao,
+  HTTP,
+  MSG_ULTIMA_SESSAO,
+} from '../utils/actividade_permissao.js';
 
 const router = Router();
 router.use(authRequired);
@@ -163,6 +169,10 @@ router.post('/', rbac(...MOVE_ROLES), async (req, res, next) => {
     const act = await prisma.actividade.findUnique({ where: { id: Number(actividade_id) } });
     if (!act || !act.activo) return res.status(404).json({ message: 'Atividade não encontrada' });
 
+    // Regras 1 (estado) + 2 (autoria): adicionar sessões é alterar a atividade.
+    const perm = await podeAlterarActividade(act, req.user);
+    if (!perm.ok) return res.status(perm.status).json({ message: perm.motivo });
+
     // Limites de participantes (capacidade do lab + min/max do tipo).
     try {
       await validarSessao({ tipo: act.tipo, laboratorio_id: act.laboratorio_id, num_participantes: participantes, hora_inicio, hora_fim });
@@ -193,15 +203,17 @@ router.post('/', rbac(...MOVE_ROLES), async (req, res, next) => {
       return res.status(409).json({ message: 'Choque de horário: já existe um agendamento aprovado neste laboratório no intervalo indicado.' });
     }
 
-    const novo = await prisma.agendamento.create({
-      data: {
-        actividade_id: Number(actividade_id),
-        num_participantes: participantes,
-        hora_inicio: new Date(hora_inicio),
-        hora_fim: new Date(hora_fim),
-      },
-      include: agInclude,
-    });
+    const novo = await alterarComPermissao(act, req.user, (tx) =>
+      tx.agendamento.create({
+        data: {
+          actividade_id: Number(actividade_id),
+          num_participantes: participantes,
+          hora_inicio: new Date(hora_inicio),
+          hora_fim: new Date(hora_fim),
+        },
+        include: agInclude,
+      }),
+    );
     res.status(201).json(toAgendamentoGet(novo));
   } catch (err) {
     next(err);
@@ -260,10 +272,20 @@ router.post('/:id/tecnicos', rbac('admin', 'supervisor'), async (req, res, next)
 });
 
 // PUT /agendamentos/:id — atualizar horário/participantes
+// Regras 1 (estado) + 2 (autoria) + RF20 (limites) + RF13 (choques).
 router.put('/:id', rbac(...MOVE_ROLES), async (req, res, next) => {
   try {
-    const ag = await prisma.agendamento.findUnique({ where: { id: Number(req.params.id) } });
+    const ag = await prisma.agendamento.findUnique({
+      where: { id: Number(req.params.id) },
+      include: { actividade: true },
+    });
     if (!ag || !ag.activo) return res.status(404).json({ message: 'Agendamento não encontrado' });
+    const act = ag.actividade;
+    if (!act || !act.activo) return res.status(404).json({ message: 'Atividade não encontrada' });
+
+    const perm = await podeAlterarActividade(act, req.user);
+    if (!perm.ok) return res.status(perm.status).json({ message: perm.motivo });
+
     const { hora_inicio, hora_fim, num_participantes } = req.body || {};
     const data = {};
     if (hora_inicio !== undefined) data.hora_inicio = new Date(hora_inicio);
@@ -275,21 +297,89 @@ router.put('/:id', rbac(...MOVE_ROLES), async (req, res, next) => {
       }
       data.num_participantes = participantes;
     }
-    const atualizado = await prisma.agendamento.update({ where: { id: ag.id }, data, include: agInclude });
+
+    // Valores efectivos (merge com o existente) para validar limites e choques.
+    const efectivo = {
+      tipo: act.tipo,
+      laboratorio_id: act.laboratorio_id,
+      num_participantes: data.num_participantes ?? ag.num_participantes,
+      hora_inicio: data.hora_inicio ?? ag.hora_inicio,
+      hora_fim: data.hora_fim ?? ag.hora_fim,
+    };
+
+    // RF20: limites de participantes por sessão.
+    try {
+      await validarSessao(efectivo);
+    } catch (e) {
+      if (e.status) return res.status(e.status).json({ message: e.message });
+      throw e;
+    }
+
+    const start = new Date(efectivo.hora_inicio).getTime();
+    const end = new Date(efectivo.hora_fim).getTime();
+    if (Number.isNaN(start) || Number.isNaN(end) || start >= end) {
+      return res.status(400).json({ message: 'hora_fim deve ser posterior a hora_inicio' });
+    }
+
+    // RF13: choque com outros agendamentos aprovados do laboratório (exclui o próprio).
+    const aprovados = await prisma.agendamento.findMany({
+      where: {
+        id: { not: ag.id },
+        activo: true,
+        estado: 'aprovado_supervisor',
+        actividade: { activo: true, laboratorio_id: act.laboratorio_id },
+      },
+      select: { hora_inicio: true, hora_fim: true },
+    });
+    for (const a of aprovados) {
+      const s = new Date(a.hora_inicio).getTime();
+      const e = new Date(a.hora_fim).getTime();
+      if (start < e && s < end) {
+        return res.status(409).json({ message: 'Choque de horário: já existe um agendamento aprovado neste laboratório no intervalo indicado.' });
+      }
+    }
+
+    const atualizado = await alterarComPermissao(act, req.user, (tx) =>
+      tx.agendamento.update({ where: { id: ag.id }, data, include: agInclude }),
+    );
     res.json(toAgendamentoGet(atualizado));
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ message: err.message });
     next(err);
   }
 });
 
 // DELETE /agendamentos/:id — soft
+// Regras 1 (estado) + 2 (autoria); não deixa a atividade sem sessões.
 router.delete('/:id', rbac(...MOVE_ROLES), async (req, res, next) => {
   try {
-    const ag = await prisma.agendamento.findUnique({ where: { id: Number(req.params.id) } });
-    if (!ag) return res.status(404).json({ message: 'Agendamento não encontrado' });
-    await prisma.agendamento.update({ where: { id: ag.id }, data: { activo: false } });
+    const ag = await prisma.agendamento.findUnique({
+      where: { id: Number(req.params.id) },
+      include: { actividade: true },
+    });
+    if (!ag || !ag.activo) return res.status(404).json({ message: 'Agendamento não encontrado' });
+    const act = ag.actividade;
+    if (!act || !act.activo) return res.status(404).json({ message: 'Atividade não encontrada' });
+
+    const perm = await podeAlterarActividade(act, req.user);
+    if (!perm.ok) return res.status(perm.status).json({ message: perm.motivo });
+
+    const restantes = await prisma.agendamento.count({
+      where: { actividade_id: act.id, activo: true, id: { not: ag.id } },
+    });
+    if (restantes === 0) return res.status(409).json({ message: MSG_ULTIMA_SESSAO });
+
+    await alterarComPermissao(act, req.user, async (tx) => {
+      const rest = await tx.agendamento.count({
+        where: { actividade_id: act.id, activo: true, id: { not: ag.id } },
+      });
+      if (rest === 0) throw HTTP(409, MSG_ULTIMA_SESSAO);
+      await tx.agendamento.update({ where: { id: ag.id }, data: { activo: false } });
+      await recalcularEstadoActividade(tx, act.id);
+    });
     res.json({ message: 'Agendamento removido' });
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ message: err.message });
     next(err);
   }
 });

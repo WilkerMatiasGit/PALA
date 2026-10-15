@@ -17,6 +17,8 @@ export interface ActividadeGet {
   observacoes: string;
   criado_em: string;
   actualizado_em: string;
+  pode_editar?: boolean;
+  pode_apagar?: boolean;
 }
 
 export interface ActividadeUpsert {
