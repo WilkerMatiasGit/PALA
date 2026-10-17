@@ -4,7 +4,7 @@ import { authRequired, rbac } from '../middleware/auth.js';
 import { recomputeMaterial } from '../utils/stock.js';
 import { toAgendamentoGet } from '../utils/dto.js';
 import { recalcularEstadoActividade } from '../utils/actividade_estado.js';
-import { validarSessao } from '../utils/validarSessao.js';
+import { validarSessao, periodoDaActividade } from '../utils/validarSessao.js';
 import {
   podeAlterarActividade,
   alterarComPermissao,
@@ -173,9 +173,11 @@ router.post('/', rbac(...MOVE_ROLES), async (req, res, next) => {
     const perm = await podeAlterarActividade(act, req.user);
     if (!perm.ok) return res.status(perm.status).json({ message: perm.motivo });
 
-    // Limites de participantes (capacidade do lab + min/max do tipo).
+    // Limites de participantes (capacidade do lab + min/max do tipo) e datas
+    // (futuro + dentro do período, quando a atividade é projeto/estágio).
     try {
-      await validarSessao({ tipo: act.tipo, laboratorio_id: act.laboratorio_id, num_participantes: participantes, hora_inicio, hora_fim });
+      const periodo = await periodoDaActividade(act);
+      await validarSessao({ tipo: act.tipo, laboratorio_id: act.laboratorio_id, num_participantes: participantes, hora_inicio, hora_fim }, periodo);
     } catch (e) {
       if (e.status) return res.status(e.status).json({ message: e.message });
       throw e;
@@ -307,9 +309,10 @@ router.put('/:id', rbac(...MOVE_ROLES), async (req, res, next) => {
       hora_fim: data.hora_fim ?? ag.hora_fim,
     };
 
-    // RF20: limites de participantes por sessão.
+    // Limites de participantes (RF20) + datas (futuro + período de projeto/estágio).
     try {
-      await validarSessao(efectivo);
+      const periodo = await periodoDaActividade(act);
+      await validarSessao(efectivo, periodo);
     } catch (e) {
       if (e.status) return res.status(e.status).json({ message: e.message });
       throw e;

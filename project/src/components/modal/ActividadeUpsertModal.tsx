@@ -77,6 +77,13 @@ const hojeISO = (): string => {
   return toISODate(d);
 };
 
+// 'YYYY-MM-DD' -> 'dd/mm/aaaa' (para as mensagens de validação).
+const fmtBR = (iso: string): string => {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+};
+
 const horaToMin = (h: string): number => {
   const [hh, mm] = h.split(':').map(Number);
   return hh * 60 + (mm || 0);
@@ -102,8 +109,8 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
   const [observacoes, setObservacoes] = useState('');
   const [responsavelId, setResponsavelId] = useState('');
 
-  // Quem não é professor escolhe o responsável; para "aula" só professores.
-  const isProf = user?.tipo === 'professor';
+  // Só o Admin atribui o responsável de uma atividade (escolhe a partir da lista de
+  // utilizadores). Para os restantes perfis o responsável é o próprio utilizador.
   const isAdmin = user?.tipo === 'admin';
   // Em edição: tipo e laboratório ficam bloqueados (regra 3); o responsável só o Admin altera.
   const isEdit = !!actividade;
@@ -134,14 +141,21 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
   const [agendamentos, setAgendamentos] = useState<AgendamentoBloc[]>([blocoVazio()]);
 
   useEffect(() => {
-    // Cada carregamento é independente: se um falhar (ex: /user é só admin),
-    // os restantes continuam a popular as listas (incluindo a de laboratórios).
+    // Cada carregamento é independente: se um falhar, os restantes continuam a
+    // popular as listas (incluindo a de laboratórios).
     laboratoriosService.list().then(setLabs).catch(() => setLabs([]));
     cursosService.listCursoDisciplinas().then(setCursoDisciplinas).catch(() => setCursoDisciplinas([]));
     cursosService.listEstudantes().then(setEstudantes).catch(() => setEstudantes([]));
-    utilizadoresService.list().then(setUsers).catch(() => setUsers([]));
     configuracaoService.getLimites().then(setLimites).catch(() => setLimites([]));
   }, []);
+
+  // Lista de utilizadores (para escolher o responsável) — só o Admin tem acesso a
+  // `GET /user` e é o único que atribui o responsável. Nos restantes perfis não se
+  // faz o pedido (evita o 403 desnecessário); o responsável é o próprio utilizador.
+  useEffect(() => {
+    if (user?.tipo !== 'admin') { setUsers([]); return; }
+    utilizadoresService.list().then(setUsers).catch(() => setUsers([]));
+  }, [user?.tipo]);
 
   useEffect(() => {
     if (labId) {
@@ -248,12 +262,13 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
   const getStepError = (s: number): string | null => {
     if (s === 1) return (!nome || !labId) ? 'Preencha o nome e o laboratório' : null;
     if (s === 2) {
-      // Responsável é sempre obrigatório para quem não é professor (auto-atribuição no backend)
-      if (!isProf && !responsavelId) return 'Selecione o responsável da atividade';
+      // Só o Admin escolhe o responsável; nos restantes perfis é o próprio utilizador.
+      if (isAdmin && !responsavelId) return 'Selecione o responsável da atividade';
       if (tipo === 'aula') return !cursoDisciplinaId ? 'Selecione a disciplina' : null;
       if (tipo === 'visita') return (!nomeVisitante || !telefone || !emailVisitante) ? 'Preencha os dados do visitante' : null;
       if (tipo === 'projecto' || tipo === 'estagio') {
-        if (!titulo || !dataInicio || !dataFim) return 'Preencha o título e as datas';
+        if (tipo === 'projecto' && !titulo) return 'Preencha o título';
+        if (!dataInicio || !dataFim) return 'Preencha as datas';
         const today = new Date(); today.setHours(0, 0, 0, 0);
         const ini = new Date(dataInicio + 'T00:00:00');
         const fim = new Date(dataFim + 'T00:00:00');
@@ -270,6 +285,8 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
       // 1) cada bloco: dia não passado + hora fim > hora início + participantes >= 1
       for (const a of filled) {
         if (a.data < todayStr) return 'O dia da sessão não pode estar no passado';
+        const pe = periodoError(a.data);
+        if (pe) return pe;
         if (a.hora_fim <= a.hora_inicio) return 'A hora de fim deve ser posterior à hora de início';
         if (!Number.isInteger(Number(a.num_participantes)) || Number(a.num_participantes) < 1) {
           return 'Indique o número de participantes (mínimo 1) em cada sessão';
@@ -318,6 +335,12 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
     : labCap;
   const labAbaixoMinimo = labCap != null && labCap < minPart;
 
+  // Período do projeto/estágio (passo 2): limita as datas das sessões (passo 3).
+  // Aula e visita não têm período.
+  const isPeriodo = tipo === 'projecto' || tipo === 'estagio';
+  const periodStart = isPeriodo ? dataInicio : '';
+  const periodEnd = isPeriodo ? dataFim : '';
+
   const rangeError = (participantes: number): string | null => {
     if (!Number.isInteger(participantes)) return null;
     if (participantes < minPart) return `Mínimo de participantes para ${ACTIVIDADE_TIPO_OPTIONS.find((o) => o.value === tipo)?.label ?? tipo}: ${minPart}`;
@@ -330,10 +353,22 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
     return null;
   };
 
+  // Erro de período (projeto/estágio): a sessão tem de estar dentro de [data_inicio, data_fim].
+  const periodoError = (data: string): string | null => {
+    if (!isPeriodo || !data) return null;
+    if ((dataInicio && data < dataInicio) || (dataFim && data > dataFim)) {
+      const nome = tipo === 'estagio' ? 'do estágio' : 'do projeto';
+      return `A data da sessão (${fmtBR(data)}) está fora do período ${nome} (${fmtBR(dataInicio)} a ${fmtBR(dataFim)})`;
+    }
+    return null;
+  };
+
   // Erro específico de um bloco de agendamento para validação em tempo real
   const blocoError = (a: AgendamentoBloc): string | null => {
     if (!a.data) return null; // ainda não escolheu o dia
     if (a.data < hojeISO()) return 'O dia não pode estar no passado';
+    const pe = periodoError(a.data);
+    if (pe) return pe;
     if (!a.hora_inicio || !a.hora_fim) return 'Indique a hora de início e de fim';
     if (a.hora_fim <= a.hora_inicio) return 'A hora de fim deve ser posterior à hora de início';
     if (!Number.isInteger(Number(a.num_participantes)) || Number(a.num_participantes) < 1) {
@@ -496,12 +531,20 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
                   <p className="text-xs text-muted-foreground">Só o Admin pode alterar o responsável.</p>
                 </div>
               ) : (
-                <div className="rounded-md border px-3 py-2 text-sm">
-                  <span className="text-muted-foreground">Responsável: </span>
-                  <span className="font-medium">{actividade?.responsavel_nome}</span>
+                <div className="space-y-2">
+                  <Label htmlFor="act-responsavel">Responsável da atividade</Label>
+                  <Select value={responsavelId} disabled>
+                    <SelectTrigger id="act-responsavel"><SelectValue placeholder="Selecionar...">{responsavelLabel || actividade?.responsavel_nome || ''}</SelectValue></SelectTrigger>
+                    <SelectContent>
+                      {responsavelId && (
+                        <SelectItem value={responsavelId}>{responsavelLabel || actividade?.responsavel_nome}</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Só o Admin pode alterar o responsável.</p>
                 </div>
               )
-            ) : !isProf ? (
+            ) : isAdmin ? (
               <div className="space-y-2">
                 <Label htmlFor="act-responsavel">Responsável da atividade</Label>
                 <Select value={responsavelId} onValueChange={setResponsavelId}>
@@ -581,22 +624,26 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
             )}
             {(tipo === 'projecto' || tipo === 'estagio') && (
               <>
-                <div className="space-y-2">
-                  <Label htmlFor="proj-titulo">Título</Label>
-                  <Input id="proj-titulo" required value={titulo} onChange={(e) => setTitulo(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="proj-desc">Descrição</Label>
-                  <Textarea id="proj-desc" value={descricao} onChange={(e) => setDescricao(e.target.value)} rows={3} />
-                </div>
+                {tipo === 'projecto' && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="proj-titulo">Título</Label>
+                      <Input id="proj-titulo" required value={titulo} onChange={(e) => setTitulo(e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="proj-desc">Descrição</Label>
+                      <Textarea id="proj-desc" value={descricao} onChange={(e) => setDescricao(e.target.value)} rows={3} />
+                    </div>
+                  </>
+                )}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="data-ini">Data início</Label>
-                    <Input id="data-ini" type="date" required value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
+                    <Input id="data-ini" type="date" required min={hojeISO()} value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="data-fim">Data fim</Label>
-                    <Input id="data-fim" type="date" required value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
+                    <Input id="data-fim" type="date" required min={dataInicio || hojeISO()} value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
                   </div>
                 </div>
                 {tipo === 'estagio' && (
@@ -635,7 +682,7 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
                     <div className="flex flex-wrap items-end gap-2">
                       <div className="space-y-1">
                         <Label className="text-xs">Dia</Label>
-                        <Input type="date" min={hojeISO()} value={ag.data} onChange={(e) => {
+                        <Input type="date" min={periodStart || hojeISO()} max={periodEnd || undefined} value={ag.data} onChange={(e) => {
                           const copy = [...agendamentos]; copy[i].data = e.target.value; setAgendamentos(copy);
                         }} />
                       </div>
@@ -709,7 +756,11 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
                               const copy = [...agendamentos]; copy[i].materiais[j].material_id = Number(v); setAgendamentos(copy);
                             }}>
                               <SelectTrigger><SelectValue placeholder="Selecionar...">{materialLabel(mr.material_id)}</SelectValue></SelectTrigger>
-                              <SelectContent>{materiais.map((m) => <SelectItem key={m.id} value={String(m.id)}>{materialLabel(m.id)}</SelectItem>)}</SelectContent>
+                              <SelectContent>
+                                {materiais
+                                  .filter((m) => !ag.materiais.some((outro, idx) => idx !== j && outro.material_id === m.id))
+                                  .map((m) => <SelectItem key={m.id} value={String(m.id)}>{materialLabel(m.id)}</SelectItem>)}
+                              </SelectContent>
                             </Select>
                           </div>
                           <div className="w-24 space-y-1">

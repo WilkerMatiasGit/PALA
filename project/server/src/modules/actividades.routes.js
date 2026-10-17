@@ -313,10 +313,19 @@ const ag = await tx.agendamento.create({
 // POST /actividades/full — criação atómica (tudo ou nada)
 // Validação de participantes por sessão (mesma regra de POST /agendamentos):
 // aplica-se às sessões criadas/recriadas pela submissão.
-async function validarParticipantesSessoes(tipo, labId, ags) {
+async function validarParticipantesSessoes(tipo, labId, ags, periodo) {
   for (const g of ags) {
-    await validarSessao({ tipo, laboratorio_id: labId, num_participantes: g.num_participantes, hora_inicio: g.hora_inicio, hora_fim: g.hora_fim });
+    await validarSessao({ tipo, laboratorio_id: labId, num_participantes: g.num_participantes, hora_inicio: g.hora_inicio, hora_fim: g.hora_fim }, periodo);
   }
+}
+
+// Período (projeto/estágio) a partir dos detalhes submetidos, para validar que as
+// sessões ficam dentro de [data_inicio, data_fim]. Aula e visita não têm período.
+function periodoDosDetalhes(tipo, detalhes) {
+  if (tipo !== 'projecto' && tipo !== 'estagio') return null;
+  const d = detalhes || {};
+  if (!d.data_inicio || !d.data_fim) return null;
+  return { inicio: d.data_inicio, fim: d.data_fim };
 }
 
 router.post('/full', rbac(...ACT_ROLES), async (req, res, next) => {
@@ -343,7 +352,7 @@ router.post('/full', rbac(...ACT_ROLES), async (req, res, next) => {
 
     await validarAgendamentos(lab.id, ags, null);
     await validarMateriais(lab.id, mats);
-    await validarParticipantesSessoes(tipo, lab.id, ags);
+    await validarParticipantesSessoes(tipo, lab.id, ags, periodoDosDetalhes(tipo, detalhes));
 
     const novo = await prisma.$transaction(async (tx) => {
       const act = await tx.actividade.create({
@@ -411,7 +420,7 @@ router.put('/:id/full', rbac(...ACT_ROLES), async (req, res, next) => {
 
     await validarAgendamentos(novoLabId, ags, act.id);
     await validarMateriais(novoLabId, mats);
-    await validarParticipantesSessoes(novoTipo, novoLabId, ags);
+    await validarParticipantesSessoes(novoTipo, novoLabId, ags, periodoDosDetalhes(novoTipo, detalhes));
 
     const data = {};
     if (nome !== undefined) data.nome = nome;

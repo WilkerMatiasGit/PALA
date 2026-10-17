@@ -394,7 +394,23 @@ O passo «Materiais» do `ActividadeUpsertModal` usava `GET /materiais` (RBAC A,
 #### Correção (endpoint de leitura mínima dedicado)
 - Novo `GET /materiais/opcoes?laboratorio_id=` (roles = `MAT_ROLES` + `professor`; declarado **antes** de `/:id`). Devolve **só** `{ id, nome, unidade, quantidade, laboratorio_id }` de materiais `activo` (a `quantidade` é o stock actual via `stockActual`). `MAT_ROLES` e todas as outras rotas ficam **inalteradas** — o professor mantém **403** em `GET /materiais`, `GET /materiais/:id`, histórico, escrita e movimentos.
 - Front: `materiaisService.listOpcoes(laboratorioId)` (+ tipo `MaterialOpcao`); o passo «Materiais» usa-o para **todos** os perfis, com `.catch` que mostra o **erro real** em vez da mensagem enganadora. O dashboard e a página `/materiais` não mudam.
-- Verificado: smoke HTTP (professor 200 em `/materiais/opcoes` e 403 nas restantes; outros perfis inalterados; criar/editar com materiais por sessão de ponta a ponta) + browser real (professor vê a lista no passo «Materiais»).
+- - Verificado: smoke HTTP (professor 200 em `/materiais/opcoes` e 403 nas restantes; outros perfis inalterados; criar/editar com materiais por sessão de ponta a ponta) + browser real (professor vê a lista no passo «Materiais»).
+
+---
+
+### 2.16. Datas das sessões e formulário de actividades (futuro + período) — ✅ implementado
+
+> **Estado:** ✅ concluído (backend + front, **sem migração de schema**, deploy pendente).
+
+#### O problema
+- As datas da sessão só eram validadas **no front**, e só contra o passado (dia de calendário). O backend aceitava sessões no passado.
+- Nada garantia que uma sessão de **projeto/estágio** caísse dentro do período `[data_inicio, data_fim]` da especialização.
+- O formulário de **estágio** pedia `título`/`descrição`, que **não existem na tabela `estagios`** (só o `projecto` tem essas colunas) — pedido inútil que podia bloquear o submit.
+- As datas macro do projeto/estágio (passo 2) não desactivavam dias passados no calendário.
+
+#### Correcção
+- **Backend (`utils/validarSessao.js`):** `validarSessao(sessao, periodo)` valida agora, além dos limites de participantes (RF20): a **data no futuro** (só o dia de calendário em hora local; **hoje é permitido**; sem limite de hora — mesma definição do `hojeISO()` do front) e **dentro de `[inicio, fim]`** quando `periodo` é indicado. Novo `periodoDaActividade(act)` lê o período da BD (projecto/estágio; `null` em aula/visita). Mensagens 400: `«A data da sessão (dd/mm/aaaa) não pode estar no passado.»` e `«A data da sessão (dd/mm/aaaa) está fora do período do projeto|estágio (dd/mm/aaaa a dd/mm/aaaa).»`. Chamado em `POST /actividades/full`/`PUT /:id/full` (período vindo dos `detalhes`) e em `POST /agendamentos`/`PUT /agendamentos/:id` (período lido da BD via `periodoDaActividade`). **Não** bloqueia sessões já aprovadas/realizadas.
+- Front (`ActividadeUpsertModal`): datas de projeto/estágio com `min` (`data_fim >= data_inicio`); passo 3 com `min`/`max` = período; alterar o período mostra erro e **não apaga** as sessões; responsável em edição só o Admin altera (Select desactivado com nota para os restantes); passo «Materiais» não repete o mesmo material **na mesma sessão**; estágio deixa de pedir `titulo`/`descricao` (só projeto).
 
 ---
 
@@ -502,6 +518,9 @@ O fluxo DLab → Supervisor está **hardcoded**: `AprovacaoEtapa {dlab, supervis
 10. **[Baixo]** Listagens sem filtros/paginação (Labs, Cursos, Disciplinas, Aprovações, Relatórios) (§2.2).
 11. **[Baixo]** `AprovacaoDetalhe`/`ActividadeDetalhe` saturadas; falta tabs (§2.8/2.9).
 12. **[Baixo]** Sem detalhe de estudante e sem detalhe de curso (§2.4/2.5).
+13. **[Baixo] ✅ implementado (B1)** `GET /user` é admin-only mas o `ActividadeUpsertModal` chamava-o no *mount* do componente (o modal está montado mesmo fechado em `ActividadesList`), logo o **professor** recebia **403** sempre que abria a página `/actividades` (silencioso: tinha `.catch(() => setUsers([]))`). **Correcção (opção a):** o modal passou a fazer o pedido **só quando o utilizador é Admin** (`useEffect([user?.tipo])`); nos restantes perfis não há pedido e o responsável é o próprio utilizador. **Decisão do dono do projecto:** só o Admin atribui o responsável (não se cria endpoint novo por agora); não se alterou quem pode criar atividades (RBAC `ACT_ROLES`) nem a RF08c. Verificado em browser (Admin `GET /user` 200; professor sem pedido e sem 403).
+14. **[Médio/A CONFIRMAR]** **Sem protecção contra auto-aprovação:** quem é **responsável** (ou criou) uma atividade pode aprová-la ele próprio na fila — a autorização só verifica o **cargo** (`podeVotarEtapa`: DLab = `coordenador_dlab`+`admin`; Supervisor = `supervisor`+`admin`), **nunca** compara o decisor com `actividades.responsavel_id`/`criado_por_id`. Concretamente, um Coordenador DLab que crie/tenha uma atividade como responsável pode votá-la na etapa DLab; um Supervisor idem na etapa Supervisor; o Admin é permitido em ambas. Se se quiser separação de funções, é preciso bloquear o decisor = responsável/autor (a decidir com o dono do projecto; **sem alteração de código por agora**).
+15. **[Baixo/A CONFIRMAR]** **Responsável de projeto/estágio pode não ser professor:** `resolverResponsavel` só obriga «professor» para o tipo `aula`; em `projecto`/`estagio` aceita o próprio autor. Como só o Admin escolhe o responsável (B1), um Coordenador/Supervisor/Chefe que crie um projeto/estágio **fica como seu responsável** (não-professor) — aceite nesta fase. (Se RF06 exigir mesmo professor em projeto/estágio, endurecer o backend — a decidir.)
 
 ### 5.3. Padronização (código/UI/UX)
 1. **[Médio]** Selects sem pesquisa em vários modais; catalogs hardcoded (enums) — deve usar `SearchSelect` com CRUD + "criar na hora" (§2.1).
@@ -528,6 +547,7 @@ O fluxo DLab → Supervisor está **hardcoded**: `AprovacaoEtapa {dlab, supervis
 7. **E6 — Técnicos por sessão + estados derivados**: `AgendamentoTecnico` (validador+assistente obrigatórios por sessão na aprovação do Supervisor); `ActividadeEstado` fecha em `{pendente, em_andamento, rejeitada, realizada}`. (**✅ concluído** — migrações aplicadas no Neon; front com decisão imediata no modal para Rejeitar/Aprovar Supervisor.)
 8. **E7 — Materiais por sessão**: `AgendamentoMaterial` (`@@unique [agendamento_id, material_id]`); `/actividades/full` recebe `agendamentos[].materiais[]`; balanço de stock somado por material. (**✅ concluído** — tabela recriada via `db push --force-reset`; RF14 inalterado.)
 9. **E8 — Limites de participantes**: `laboratorios.capacidade` + `limites_participantes`; `utils/validarSessao.js`; `GET/PUT /configuracao/limites`. (**✅ concluído** — migração `20261010000000_capacidade_limites_participantes` aplicada por método manual; smoke test HTTP + unit `validarSessao`.)
+10. **Correcções ao formulário de Actividades (§2.16)**: datas das sessões no futuro + dentro do período de projeto/estágio (backend `validarSessao(sessao, periodo)` + `periodoDaActividade`; front `min`/`max`), estágio sem título/descrição, responsável cinzento p/ não-Admin, materiais sem repetição por sessão. (**✅ concluído** — sem migração; smoke HTTP 23/23 + browser Playwright; `typecheck`/`lint` 0 erros.)
 
 ### 6.1. Método de migração (drift herdado — ler antes de novas migrações)
 
