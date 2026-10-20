@@ -26,8 +26,22 @@ export async function ensureLimitesParticipantes(client = prisma) {
   });
 }
 
+// Id fixo da linha única de configurações gerais do sistema.
+export const CONFIGURACAO_GERAL_ID = 1;
+
+// Garante a linha única de configurações gerais (idempotente; não toca numa linha
+// que já exista). Os defaults são aplicados pelo schema (`permitir_fim_semana=false`).
+export async function ensureConfiguracaoGeral(client = prisma) {
+  await client.configuracaoGeral.upsert({
+    where: { id: CONFIGURACAO_GERAL_ID },
+    create: { id: CONFIGURACAO_GERAL_ID },
+    update: {},
+  });
+}
+
 export async function initDb() {
   await prisma.$queryRaw`SELECT 1`;
   await ensureLimitesParticipantes();
+  await ensureConfiguracaoGeral();
   return prisma;
 }

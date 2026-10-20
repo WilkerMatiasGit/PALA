@@ -11,6 +11,7 @@ import {
   toAgendamentoGet,
 } from '../utils/dto.js';
 import { validarSessao } from '../utils/validarSessao.js';
+import { obterConfiguracaoGeral } from '../utils/configuracao.js';
 import {
   podeAlterarActividade,
   alterarComPermissao,
@@ -313,9 +314,9 @@ const ag = await tx.agendamento.create({
 // POST /actividades/full — criação atómica (tudo ou nada)
 // Validação de participantes por sessão (mesma regra de POST /agendamentos):
 // aplica-se às sessões criadas/recriadas pela submissão.
-async function validarParticipantesSessoes(tipo, labId, ags, periodo) {
+async function validarParticipantesSessoes(tipo, labId, ags, periodo, configuracao) {
   for (const g of ags) {
-    await validarSessao({ tipo, laboratorio_id: labId, num_participantes: g.num_participantes, hora_inicio: g.hora_inicio, hora_fim: g.hora_fim }, periodo);
+    await validarSessao({ tipo, laboratorio_id: labId, num_participantes: g.num_participantes, hora_inicio: g.hora_inicio, hora_fim: g.hora_fim }, { periodo, configuracao });
   }
 }
 
@@ -352,7 +353,8 @@ router.post('/full', rbac(...ACT_ROLES), async (req, res, next) => {
 
     await validarAgendamentos(lab.id, ags, null);
     await validarMateriais(lab.id, mats);
-    await validarParticipantesSessoes(tipo, lab.id, ags, periodoDosDetalhes(tipo, detalhes));
+    const configuracao = await obterConfiguracaoGeral();
+    await validarParticipantesSessoes(tipo, lab.id, ags, periodoDosDetalhes(tipo, detalhes), configuracao);
 
     const novo = await prisma.$transaction(async (tx) => {
       const act = await tx.actividade.create({
@@ -420,7 +422,8 @@ router.put('/:id/full', rbac(...ACT_ROLES), async (req, res, next) => {
 
     await validarAgendamentos(novoLabId, ags, act.id);
     await validarMateriais(novoLabId, mats);
-    await validarParticipantesSessoes(novoTipo, novoLabId, ags, periodoDosDetalhes(novoTipo, detalhes));
+    const configuracao = await obterConfiguracaoGeral();
+    await validarParticipantesSessoes(novoTipo, novoLabId, ags, periodoDosDetalhes(novoTipo, detalhes), configuracao);
 
     const data = {};
     if (nome !== undefined) data.nome = nome;

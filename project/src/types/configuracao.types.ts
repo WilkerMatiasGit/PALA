@@ -34,3 +34,7 @@ export interface LimiteParticipantesUpsert {
 export interface LimitesUpdate {
   itens: LimiteParticipantesGet[];
 }
+
+export interface ConfiguracaoGeralGet {
+  permitir_fim_semana: boolean;
+}

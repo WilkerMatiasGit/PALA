@@ -1,13 +1,15 @@
 import { Router } from 'express';
-import { prisma, TIPOS_ACTIVIDADE } from '../db.js';
+import { prisma, TIPOS_ACTIVIDADE, CONFIGURACAO_GERAL_ID } from '../db.js';
 import { authRequired, rbac } from '../middleware/auth.js';
 import { obterFluxo, FLUXO_DEFAULT } from '../utils/fluxo.js';
-import { toLimiteGet } from '../utils/dto.js';
+import { obterConfiguracaoGeral } from '../utils/configuracao.js';
+import { toLimiteGet, toConfiguracaoGeralGet } from '../utils/dto.js';
 
 // Configuração do sistema.
 //  - Fluxo de aprovação: só Admin (a leitura do fluxo é feita internamente pelo motor).
 //  - Limites de participantes: GET para qualquer utilizador autenticado (o professor
 //    precisa de ler para validar o formulário); PUT só Admin.
+//  - Configurações gerais: GET para qualquer autenticado (idem); PUT só Admin.
 
 const router = Router();
 router.use(authRequired);
@@ -152,6 +154,34 @@ router.put('/limites', rbac('admin'), async (req, res, next) => {
     });
     const rows = await prisma.limiteParticipantes.findMany({ where: { activo: true }, orderBy: { id: 'asc' } });
     res.json(rows.map(toLimiteGet));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /configuracao/geral — configurações gerais (linha única). Qualquer utilizador
+// autenticado (o formulário do professor precisa de ler `permitir_fim_semana`).
+router.get('/geral', async (req, res, next) => {
+  try {
+    res.json(toConfiguracaoGeralGet(await obterConfiguracaoGeral()));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /configuracao/geral — só Admin. Body: { permitir_fim_semana: boolean }.
+router.put('/geral', rbac('admin'), async (req, res, next) => {
+  try {
+    const { permitir_fim_semana } = req.body || {};
+    if (typeof permitir_fim_semana !== 'boolean') {
+      return res.status(400).json({ message: 'permitir_fim_semana é obrigatório e deve ser booleano' });
+    }
+    const row = await prisma.configuracaoGeral.upsert({
+      where: { id: CONFIGURACAO_GERAL_ID },
+      create: { id: CONFIGURACAO_GERAL_ID, permitir_fim_semana },
+      update: { permitir_fim_semana, activo: true },
+    });
+    res.json(toConfiguracaoGeralGet(row));
   } catch (err) {
     next(err);
   }

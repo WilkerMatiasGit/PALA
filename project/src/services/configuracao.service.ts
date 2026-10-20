@@ -1,5 +1,5 @@
 import { api, apiErrorMessage } from './api';
-import type { FluxoEtapaGet, FluxoUpdate, LimiteParticipantesGet } from '@/types/configuracao.types';
+import type { FluxoEtapaGet, FluxoUpdate, LimiteParticipantesGet, ConfiguracaoGeralGet } from '@/types/configuracao.types';
 
 export const configuracaoService = {
   // GET /configuracao/fluxo — etapas ativas por ordem (A,C,S)
@@ -47,6 +47,26 @@ export const configuracaoService = {
     try {
       const { data } = await api.put<LimiteParticipantesGet[]>('/configuracao/limites', { itens });
       return data;
+    } catch (err) {
+      throw new Error(apiErrorMessage(err));
+    }
+  },
+
+  // GET /configuracao/geral — configurações gerais (qualquer autenticado)
+  async getGeral(): Promise<ConfiguracaoGeralGet> {
+    try {
+      const { data } = await api.get<ConfiguracaoGeralGet>('/configuracao/geral');
+      return data;
+    } catch (err) {
+      throw new Error(apiErrorMessage(err));
+    }
+  },
+
+  // PUT /configuracao/geral — guardar as configurações gerais (A)
+  async updateGeral(data: ConfiguracaoGeralGet): Promise<ConfiguracaoGeralGet> {
+    try {
+      const { data: updated } = await api.put<ConfiguracaoGeralGet>('/configuracao/geral', data);
+      return updated;
     } catch (err) {
       throw new Error(apiErrorMessage(err));
     }

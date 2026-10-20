@@ -382,9 +382,22 @@ model LimiteParticipantes {
   activo         Boolean        @default(true)
 
   @@map("limites_participantes")
-}
+  }
 
-model Agendamento {
+  // Configurações gerais do sistema (linha única). Outras colunas serão
+  // acrescentadas em pedidos seguintes (feriados, antecedência mínima, prazo de confirmação).
+  // `activo` é o soft delete (BaseEntity); o interruptor é `permitir_fim_semana`.
+  model ConfiguracaoGeral {
+    id                   Int      @id @default(autoincrement())
+    permitir_fim_semana  Boolean  @default(false)
+    criado_em            DateTime @default(now())
+    actualizado_em       DateTime @updatedAt
+    activo               Boolean  @default(true)
+
+    @@map("configuracoes_gerais")
+  }
+
+  model Agendamento {
   id                   Int              @id @default(autoincrement())
   actividade_id        Int
   num_participantes    Int              @default(1)

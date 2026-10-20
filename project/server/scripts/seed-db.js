@@ -7,7 +7,7 @@
 // No fim, sincroniza as sequences com os MAX(id) — os IDs do seed são explícitos e,
 // sem setval, o Postgres/Neon reusa ids no próximo INSERT (Unique constraint failed).
 
-import { prisma } from '../src/db.js';
+import { prisma, ensureConfiguracaoGeral } from '../src/db.js';
 import { syncSequences } from './sync-sequences.js';
 
 const force = process.argv.includes('--force');
@@ -104,6 +104,10 @@ async function run() {
       { id: 4, tipo: 'estagio', min: 1, max: 40, limite_activo: false },
     ],
   });
+
+  // ---- Configurações gerais (linha única; fim de semana bloqueado por defeito) ----
+  console.log('[seed] configurações gerais...');
+  await ensureConfiguracaoGeral();
 
   // ---- Académico ----
   console.log('[seed] cursos/disciplinas/cursoDisciplinas/estudantes...');

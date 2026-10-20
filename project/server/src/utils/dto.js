@@ -46,6 +46,12 @@ export function toLimiteGet(l) {
   };
 }
 
+export function toConfiguracaoGeralGet(c) {
+  return {
+    permitir_fim_semana: c.permitir_fim_semana,
+  };
+}
+
 export function toDisciplinaGet(d) {
   return {
     id: d.id,

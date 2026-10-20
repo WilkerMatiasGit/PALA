@@ -89,6 +89,15 @@ const horaToMin = (h: string): number => {
   return hh * 60 + (mm || 0);
 };
 
+const DIAS_SEMANA = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+
+// Dia da semana (0=domingo … 6=sábado) a partir da data de calendário 'YYYY-MM-DD',
+// usando componentes locais — sem `new Date('aaaa-mm-dd')` (que interpreta em UTC).
+const diaSemana = (iso: string): number => {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d).getDay();
+};
+
 export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved }: Props) {
   const { user } = useAuth();
   const [step, setStep] = useState(1);
@@ -101,6 +110,10 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
   const [existingAgendamentos, setExistingAgendamentos] = useState<AgendamentoGet[]>([]);
   const [estudantes, setEstudantes] = useState<EstudanteGet[]>([]);
   const [limites, setLimites] = useState<LimiteParticipantesGet[]>([]);
+  // Configurações gerais (só leitura). null = ainda não carregado ou leitura falhou;
+  // nesse caso NÃO bloqueamos o utilizador (o backend valida de qualquer forma).
+  const [permitirFimSemana, setPermitirFimSemana] = useState<boolean | null>(null);
+  const [configGeralErro, setConfigGeralErro] = useState('');
 
   // Step 1: base
   const [nome, setNome] = useState('');
@@ -147,6 +160,12 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
     cursosService.listCursoDisciplinas().then(setCursoDisciplinas).catch(() => setCursoDisciplinas([]));
     cursosService.listEstudantes().then(setEstudantes).catch(() => setEstudantes([]));
     configuracaoService.getLimites().then(setLimites).catch(() => setLimites([]));
+    // Configurações gerais (todos os perfis): o professor precisa de saber se os fins
+    // de semana estão bloqueados para validar o formulário. Se falhar, mostra o erro
+    // real e não bloqueia (o backend valida de qualquer forma).
+    configuracaoService.getGeral()
+      .then((c) => { setPermitirFimSemana(c.permitir_fim_semana); setConfigGeralErro(''); })
+      .catch((err) => { setPermitirFimSemana(null); setConfigGeralErro(apiErrorMessage(err)); });
   }, []);
 
   // Lista de utilizadores (para escolher o responsável) — só o Admin tem acesso a
@@ -287,6 +306,8 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
         if (a.data < todayStr) return 'O dia da sessão não pode estar no passado';
         const pe = periodoError(a.data);
         if (pe) return pe;
+        const fs = fimSemanaError(a.data);
+        if (fs) return fs;
         if (a.hora_fim <= a.hora_inicio) return 'A hora de fim deve ser posterior à hora de início';
         if (!Number.isInteger(Number(a.num_participantes)) || Number(a.num_participantes) < 1) {
           return 'Indique o número de participantes (mínimo 1) em cada sessão';
@@ -363,12 +384,25 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
     return null;
   };
 
+  // Erro de fim de semana: só quando a configuração está carregada e desactivada
+  // (`permitir_fim_semana === false`). Se a leitura falhou (null), não bloqueia.
+  const fimSemanaError = (data: string): string | null => {
+    if (permitirFimSemana !== false || !data) return null;
+    const dow = diaSemana(data);
+    if (dow === 0 || dow === 6) {
+      return `Não é permitido agendar ao fim de semana (${fmtBR(data)} é ${DIAS_SEMANA[dow]}).`;
+    }
+    return null;
+  };
+
   // Erro específico de um bloco de agendamento para validação em tempo real
   const blocoError = (a: AgendamentoBloc): string | null => {
     if (!a.data) return null; // ainda não escolheu o dia
     if (a.data < hojeISO()) return 'O dia não pode estar no passado';
     const pe = periodoError(a.data);
     if (pe) return pe;
+    const fs = fimSemanaError(a.data);
+    if (fs) return fs;
     if (!a.hora_inicio || !a.hora_fim) return 'Indique a hora de início e de fim';
     if (a.hora_fim <= a.hora_inicio) return 'A hora de fim deve ser posterior à hora de início';
     if (!Number.isInteger(Number(a.num_participantes)) || Number(a.num_participantes) < 1) {
@@ -672,6 +706,16 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
             {labAbaixoMinimo && (
               <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-800">
                 A capacidade do laboratório ({labCap}) é inferior ao mínimo de {ACTIVIDADE_TIPO_OPTIONS.find((o) => o.value === tipo)?.label ?? tipo} ({minPart}). Não é possível criar sessões deste tipo neste laboratório.
+              </p>
+            )}
+            {permitirFimSemana === false && (
+              <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-800">
+                Fins de semana não permitidos.
+              </p>
+            )}
+            {configGeralErro && (
+              <p className="rounded-md border border-destructive/50 bg-destructive/10 p-2 text-sm text-destructive">
+                Não foi possível ler as regras de agendamento: {configGeralErro}
               </p>
             )}
             {agendamentos.map((ag, i) => {

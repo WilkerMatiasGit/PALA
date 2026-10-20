@@ -13,6 +13,8 @@ import { Spinner } from '@/components/ui/spinner';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { NumberInput } from '@/components/ui/number-input';
+import { Switch } from '@/components/ui/switch';
+import { ErrorState } from '@/components/ui/error-state';
 import { configuracaoService } from '@/services/configuracao.service';
 import { unidadesLaboratoriaisService, categoriasMaterialService, unidadesService } from '@/services/catalogos.service';
 import { laboratoriosService } from '@/services/laboratorios.service';
@@ -282,6 +284,64 @@ function LimitesParticipantesPainel({ podeEditar }: { podeEditar: boolean }) {
   );
 }
 
+function RegrasAgendamentoPainel() {
+  const [permitirFimSemana, setPermitirFimSemana] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const load = () => {
+    setLoading(true);
+    setErro(null);
+    configuracaoService
+      .getGeral()
+      .then((c) => setPermitirFimSemana(c.permitir_fim_semana))
+      .catch((err) => setErro(err instanceof Error ? err.message : 'Erro ao carregar as regras de agendamento'))
+      .finally(() => setLoading(false));
+  };
+  useEffect(() => { load(); }, []);
+
+  const guardar = async () => {
+    setSaving(true);
+    try {
+      const updated = await configuracaoService.updateGeral({ permitir_fim_semana: permitirFimSemana });
+      setPermitirFimSemana(updated.permitir_fim_semana);
+      toast.success('Regras de agendamento atualizadas');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao guardar as regras de agendamento');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <Card><CardContent className="p-6"><Spinner /></CardContent></Card>;
+  if (erro) return <Card><CardContent className="p-6"><ErrorState title="Erro ao carregar as regras de agendamento" message={erro} onRetry={load} /></CardContent></Card>;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Settings className="h-4 w-4" /> Regras de agendamento
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-3">
+          <div className="space-y-0.5">
+            <Label htmlFor="permitir-fim-semana">Permitir agendamentos ao sábado e ao domingo</Label>
+            <p className="text-xs text-muted-foreground">
+              Só afecta pedidos novos (criação/edição de sessões). Sessões já existentes não são alteradas.
+            </p>
+          </div>
+          <Switch id="permitir-fim-semana" checked={permitirFimSemana} onCheckedChange={setPermitirFimSemana} />
+        </div>
+        <div className="flex justify-end">
+          <Button onClick={guardar} disabled={saving}>{saving ? <Spinner className="mr-2" /> : null}Guardar regras</Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Configuracao() {
   const { user } = useAuth();
   const podeEditar = hasRole(user?.tipo, ['admin']);
@@ -380,6 +440,7 @@ export default function Configuracao() {
           <TabsTrigger value="fluxo">Fluxo de Aprovação</TabsTrigger>
           <TabsTrigger value="catalogos">Catálogos</TabsTrigger>
           <TabsTrigger value="limites">Limites de Participantes</TabsTrigger>
+          <TabsTrigger value="regras">Regras de agendamento</TabsTrigger>
         </TabsList>
 
         <TabsContent value="fluxo">
@@ -464,6 +525,10 @@ export default function Configuracao() {
 
         <TabsContent value="limites">
           <LimitesParticipantesPainel podeEditar={podeEditar} />
+        </TabsContent>
+
+        <TabsContent value="regras">
+          <RegrasAgendamentoPainel />
         </TabsContent>
       </Tabs>
 
