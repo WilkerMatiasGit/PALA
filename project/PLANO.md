@@ -436,6 +436,31 @@ O passo «Materiais» do `ActividadeUpsertModal` usava `GET /materiais` (RBAC A,
 
 ---
 
+### 2.18. Campos de data do formulário de Actividades — picker com dias desactivados — ✅ implementado
+
+> **Estado:** ✅ concluído (front, **sem migração**, deploy pendente).
+> **Escopo fechado:** substituir os 3 `<input type="date">` do `ActividadeUpsertModal` (data_inicio, data_fim, dia da sessão) por um picker que **impede a selecção de dias inválidos**. **Não** se alterou o backend, a validação existente nem o input de navegação do `Calendario.tsx` (fora de escopo).
+
+#### O problema
+- Os 3 campos de data do formulário eram `<input type="date">` nativos: o utilizador via o calendário do browser mas podia escolher dias inválidos (passado, fim de semana com a regra do RF21 desligada, dias fora do período de projeto/estágio); o erro só aparecia no submit.
+
+#### Como ficou
+- **Util partilhada `src/utils/dateInput.ts` (fonte única das regras de dia):** conversões **locais** `deISO`/`paraISO`/`hojeISO`/`fmtBR`/`toDateInput`, `diaSemana`/`ehFimDeSemana` (sem conversão de fuso — mesma filosofia do RF21) e a regra central **`diaDesactivado(date, regras: RegrasDia)`** com regras numeradas: (1) passado; (2) `min`/`max` inclusive; (3) fim de semana quando `permitirFimSemana === false`. Tem um **PONTO DE EXTENSÃO** explícito (comentário) para regras futuras (feriados, antecedência mínima) — basta acrescentar ao `RegrasDia` e à função, sem tocar nos componentes.
+- **Componente partilhado `src/components/ui/date-field.tsx`:** Popover (Radix) + `Calendar` (`ui/calendar.tsx`, react-day-picker v8) com `locale={ptBR}`, `weekStartsOn={1}`. O `value`/`onChange` são **sempre `aaaa-mm-dd`** (strings), a mostrar `dd/mm/aaaa`. Dias desactivados via prop `isDayDisabled?: (date) => boolean`; `min`/`max` aplicados; dia desactivado é **cinzento e não clicável** (react-day-picker v8, `disabled`). Acessibilidade: nomes acessíveis por dia via `formatters.formatDay` (span `sr-only`, ex.: «quarta-feira, 21 de outubro de 2026»), navegável por teclado, popover utilizável a 390px de largura (`w-auto max-w-[calc(100vw-1rem)]`).
+- **Regras por campo (só o que faz sentido):**
+  - **Dia da sessão:** passado + fora do período `[data_inicio, data_fim]` (projeto/estágio) + fim de semana quando a regra do RF21 está desligada.
+  - **data_inicio:** só passado (fim de semana **não** desactivado — a macro pode começar/terminar ao fim de semana).
+  - **data_fim:** passado + dias antes de `data_inicio`.
+- **Edição:** um valor já existente que passe a desactivado (ex.: sábado com a regra agora ligada) é **mostrado** no campo com `aria-invalid` e nunca é **apagado em silêncio**; o utilizador tem de escolher outro dia.
+- **Rede de segurança intacta:** todas as validações/mensagens do `getStepError` (futuro, período, fim de semana, limites de participantes) **mantêm-se** — o picker só evita o erro antes do submit.
+
+#### Verificação
+- **Fuso horário (unit, script temporário fora do repo):** bundle esbuild do util + 44 asserções em `TZ=UTC` e `TZ=Africa/Luanda` — **44/44 em ambos** (meia-noite/mês/ano/anos bissextos, round-trips, `diaDesactivado` com fim de semana OFF/ON/nulo, `min`/`max` inclusive).
+- **Browser (Playwright/Edge, 33/33):** regra OFF → sábado/domingo desactivados, dia útil e hoje activos, ontem desactivado, clicar desactivado é **no-op**, escolha preenche `dd/mm/aaaa` e o payload `POST` contém exactamente o dia clicado (`hora_inicio:"2026-10-22T09:00"`); regra ON → sábado clicável; **estágio** → data_inicio/data_fim aceitam fim de semana, data_fim bloqueia antes do início, sessão bloqueia pré-período e sábado dentro do período (regra OFF); **edição** → o sábado desactivado **mostra-se** e o campo fica `aria-invalid`; **390px** → popover dentro do viewport e clicável; limpeza OK.
+- **Edição + regressão de aprovação:** mudar o dia de uma sessão e guardar via UI → `PUT /actividades/:id/full` com o dia novo, BD actualizada; DLab aprova e Supervisor rejeita continuam a funcionar (201). `typecheck` 0 erros, `lint` 0 erros (17 warnings baseline).
+
+---
+
 ## 3. TELA DE CONFIGURAÇÃO DO SISTEMA (fluxo de aprovação configurável)
 
 > **Estado:** ✅ (E0 backend + E2 front) — `FluxoAprovacao` + `GET/PUT /configuracao/fluxo` + `/reset`, fila config-driven; `Configuracao.tsx` em `/configuracao` (A) com tabs "Fluxo de Aprovação" (reordenação up/down, nomes editáveis, checkboxes de cargos, guardar + repor padrão) e "Catálogos" (CRUD de unidades laboratoriais, categorias de material e unidades de medida).
@@ -550,7 +575,7 @@ O fluxo DLab → Supervisor está **hardcoded**: `AprovacaoEtapa {dlab, supervis
 2. **[Médio]** Padrão de listagem inconsistente (nem todas usam `FiltersBar`+`SimplePagination`) (§2.2).
 3. **[Médio]** `window.prompt` viola a norma "nunca usar confirm/alert/prompt nativos" (§2.3).
 4. **[Médio]** Validação só no submit; `type=number` aceita `-1`/`e` (§2.13).
-5. **[Baixo]** `@tanstack/react-query`, `zustand`, `react-hook-form`(parcial), `@tanstack/react-table`, `react-day-picker` instalados mas sem uso — peso morto no bundle. — ✅ **[E4]** removidos `react-query`/`zustand`/`react-table`/`@supabase/supabase-js`/`zod`/`@hookform/resolvers`; `react-hook-form` (usado em `ui/form`) e `react-day-picker` (usado em `ui/calendar`) mantidos.
+5. **[Baixo]** `@tanstack/react-query`, `zustand`, `react-hook-form`(parcial), `@tanstack/react-table`, `react-day-picker` instalados mas sem uso — peso morto no bundle. — ✅ **[E4]** removidos `react-query`/`zustand`/`react-table`/`@supabase/supabase-js`/`zod`/`@hookform/resolvers`; `react-hook-form` (usado em `ui/form`) e `react-day-picker` mantidos. — ✅ **[§2.18]** `react-day-picker` (v8) passa a estar em uso real no novo `ui/date-field.tsx` (picker dos campos de data do `ActividadeUpsertModal`), deixando de ser peso morto.
 6. **[Baixo]** Tabelas manuais em vez de `react-table`; paginação `pagination.tsx` não usada (usar `simple-pagination`). — 🟡 **[E4]** `react-table` desinstalado (tabelas manuais mantidas); `pagination.tsx` continua não usado (usar `simple-pagination`).
 7. **[Baixo]** Front `enums.ts` diverge de labels AGENTS.md só no nome dos estados — já alinhado nesta revisão.
 8. **[Baixo]** `server/` sem package.json de deps (tudo na raiz) — complica deploy da Vercel (§4). — ✅ **[E3]** workspace `server` com deps próprias.

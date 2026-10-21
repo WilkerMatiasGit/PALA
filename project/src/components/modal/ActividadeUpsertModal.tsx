@@ -30,6 +30,8 @@ import type { EstudanteGet } from '@/types/estudantes.types';
 import type { ActividadeTipo } from '@/services/enums';
 import { useAuth } from '@/context/AuthContext';
 import { semestreToAno, semestreNoAno } from '@/utils/constants';
+import { DIAS_SEMANA, diaDesactivado, diaSemana, fmtBR, hojeISO, paraISO, toDateInput } from '@/utils/dateInput';
+import { DateField } from '@/components/ui/date-field';
 import { Plus, Trash2, ChevronRight, ChevronLeft, ClipboardList } from 'lucide-react';
 
 interface Props {
@@ -56,46 +58,11 @@ const blocoVazio = (): AgendamentoBloc => ({
   materiais: [],
 });
 
-const toISODate = (d: Date): string => {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-};
-
-// Converte uma data ISO (vinda do backend, ex.: "2026-08-15T00:00:00.000Z") no
-// formato aceite pelo <input type="date"> (yyyy-mm-dd), sem deslocação de fuso.
-const toDateInput = (v: string | Date | null | undefined): string => {
-  if (!v) return '';
-  const s = typeof v === 'string' ? v : v.toISOString();
-  return s.slice(0, 10);
-};
-
-const hojeISO = (): string => {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return toISODate(d);
-};
-
-// 'YYYY-MM-DD' -> 'dd/mm/aaaa' (para as mensagens de validação).
-const fmtBR = (iso: string): string => {
-  if (!iso) return '';
-  const [y, m, d] = iso.split('-');
-  return `${d}/${m}/${y}`;
-};
-
+// Conversões e regras de datas vivem em @/utils/dateInput (partilhadas com o
+// DateField; nunca usar `toISOString()` nem `new Date('aaaa-mm-dd')`).
 const horaToMin = (h: string): number => {
   const [hh, mm] = h.split(':').map(Number);
   return hh * 60 + (mm || 0);
-};
-
-const DIAS_SEMANA = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
-
-// Dia da semana (0=domingo … 6=sábado) a partir da data de calendário 'YYYY-MM-DD',
-// usando componentes locais — sem `new Date('aaaa-mm-dd')` (que interpreta em UTC).
-const diaSemana = (iso: string): number => {
-  const [y, m, d] = iso.split('-').map(Number);
-  return new Date(y, m - 1, d).getDay();
 };
 
 export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved }: Props) {
@@ -262,7 +229,7 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
           const inicio = new Date(g.hora_inicio);
           const fim = new Date(g.hora_fim);
           return {
-            data: toISODate(inicio),
+            data: paraISO(inicio),
             hora_inicio: `${String(inicio.getHours()).padStart(2, '0')}:${String(inicio.getMinutes()).padStart(2, '0')}`,
             hora_fim: `${String(fim.getHours()).padStart(2, '0')}:${String(fim.getMinutes()).padStart(2, '0')}`,
             num_participantes: String(g.num_participantes ?? 1),
@@ -334,7 +301,7 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
           if (currentActId && g.actividade_id === currentActId) continue;
           const go = new Date(g.hora_inicio);
           if (isNaN(go.getTime())) continue;
-          if (toISODate(go) !== a.data) continue;
+          if (paraISO(go) !== a.data) continue;
           const gs = go.getHours() * 60 + go.getMinutes();
           const gf = new Date(g.hora_fim);
           const ge = gf.getHours() * 60 + gf.getMinutes();
@@ -361,6 +328,18 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
   const isPeriodo = tipo === 'projecto' || tipo === 'estagio';
   const periodStart = isPeriodo ? dataInicio : '';
   const periodEnd = isPeriodo ? dataFim : '';
+
+  // Regras de dias desactivados no calendário do dia da sessão (passo 3):
+  // passado, fora do período (projeto/estágio) e fim de semana quando a regra
+  // está desligada. min/max também são aplicados pelo próprio DateField.
+  const diaSessaoDesactivado = (d: Date): boolean =>
+    diaDesactivado(d, {
+      hoje: hojeISO(),
+      min: periodStart || hojeISO(),
+      max: periodEnd || undefined,
+      fimDeSemana: true,
+      permitirFimSemana,
+    });
 
   const rangeError = (participantes: number): string | null => {
     if (!Number.isInteger(participantes)) return null;
@@ -395,14 +374,20 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
     return null;
   };
 
+  // Erros de data de uma sessão (passado / fora do período / fim de semana):
+  // alimentam o texto do bloco e marcam o campo do dia como inválido.
+  const dataError = (data: string): string | null => {
+    if (!data) return null; // ainda não escolheu o dia
+    if (data < hojeISO()) return 'O dia não pode estar no passado';
+    const pe = periodoError(data);
+    if (pe) return pe;
+    return fimSemanaError(data);
+  };
+
   // Erro específico de um bloco de agendamento para validação em tempo real
   const blocoError = (a: AgendamentoBloc): string | null => {
-    if (!a.data) return null; // ainda não escolheu o dia
-    if (a.data < hojeISO()) return 'O dia não pode estar no passado';
-    const pe = periodoError(a.data);
-    if (pe) return pe;
-    const fs = fimSemanaError(a.data);
-    if (fs) return fs;
+    const de = dataError(a.data);
+    if (de) return de;
     if (!a.hora_inicio || !a.hora_fim) return 'Indique a hora de início e de fim';
     if (a.hora_fim <= a.hora_inicio) return 'A hora de fim deve ser posterior à hora de início';
     if (!Number.isInteger(Number(a.num_participantes)) || Number(a.num_participantes) < 1) {
@@ -673,11 +658,27 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="data-ini">Data início</Label>
-                    <Input id="data-ini" type="date" required min={hojeISO()} value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
+                    <DateField
+                      id="data-ini"
+                      aria-label="Data início"
+                      required
+                      min={hojeISO()}
+                      value={dataInicio}
+                      onChange={setDataInicio}
+                      invalid={!!dataInicio && dataInicio < hojeISO()}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="data-fim">Data fim</Label>
-                    <Input id="data-fim" type="date" required min={dataInicio || hojeISO()} value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
+                    <DateField
+                      id="data-fim"
+                      aria-label="Data fim"
+                      required
+                      min={dataInicio || hojeISO()}
+                      value={dataFim}
+                      onChange={setDataFim}
+                      invalid={!!dataFim && (dataFim < hojeISO() || !!(dataInicio && dataFim < dataInicio))}
+                    />
                   </div>
                 </div>
                 {tipo === 'estagio' && (
@@ -724,11 +725,19 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
                 <Card key={i}>
                   <CardContent className="space-y-3 pt-4">
                     <div className="flex flex-wrap items-end gap-2">
-                      <div className="space-y-1">
+                      <div className="min-w-40 space-y-1">
                         <Label className="text-xs">Dia</Label>
-                        <Input type="date" min={periodStart || hojeISO()} max={periodEnd || undefined} value={ag.data} onChange={(e) => {
-                          const copy = [...agendamentos]; copy[i].data = e.target.value; setAgendamentos(copy);
-                        }} />
+                        <DateField
+                          aria-label="Dia da sessão"
+                          min={periodStart || hojeISO()}
+                          max={periodEnd || undefined}
+                          isDayDisabled={diaSessaoDesactivado}
+                          value={ag.data}
+                          invalid={!!dataError(ag.data)}
+                          onChange={(v) => {
+                            const copy = [...agendamentos]; copy[i].data = v; setAgendamentos(copy);
+                          }}
+                        />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-xs">Início</Label>
