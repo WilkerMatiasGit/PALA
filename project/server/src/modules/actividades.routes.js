@@ -177,10 +177,13 @@ function montarDetalhes(tipo, det) {
         numero_turma: Number.isInteger(num) && num > 0 ? num : null,
       };
     }
-    case 'visita':
-      return d.nome_visitante && d.telefone && d.email
-        ? { nome_visitante: d.nome_visitante, instituicao: d.instituicao || null, telefone: d.telefone, email: d.email }
-        : null;
+    case 'visita': {
+      const tel = String(d.telefone || '').replace(/\s/g, '');
+      if (!d.nome_visitante || !tel || !d.email) return null;
+      if (!/^[0-9]{9}$/.test(tel)) return 'TELEFONE_INVALIDO';
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(d.email))) return 'EMAIL_INVALIDO';
+      return { nome_visitante: d.nome_visitante, instituicao: d.instituicao || null, telefone: tel, email: String(d.email) };
+    }
     case 'projecto':
       return d.titulo && d.data_inicio && d.data_fim
         ? {
@@ -190,14 +193,12 @@ function montarDetalhes(tipo, det) {
             data_fim: new Date(d.data_fim),
           }
         : null;
-    case 'estagio':
-      return d.estudante_id != null && d.data_inicio && d.data_fim
-        ? {
-            estudante_id: Number(d.estudante_id),
-            data_inicio: new Date(d.data_inicio),
-            data_fim: new Date(d.data_fim),
-          }
-        : null;
+    case 'estagio': {
+      if (d.estudante_id == null || !d.data_inicio || !d.data_fim) return null;
+      const estId = Number(d.estudante_id);
+      if (!Number.isInteger(estId) || estId < 1) return 'ESTUDANTE_INVALIDO';
+      return { estudante_id: estId, data_inicio: new Date(d.data_inicio), data_fim: new Date(d.data_fim) };
+    }
     default:
       return null;
   }
@@ -349,7 +350,17 @@ router.post('/full', rbac(...ACT_ROLES), async (req, res, next) => {
     const mats = aplanarMateriais(ags);
 
     const spe = montarDetalhes(tipo, detalhes);
-    if (!spe) return res.status(400).json({ message: 'Faltam detalhes obrigatórios para o tipo selecionado' });
+    if (spe === 'TELEFONE_INVALIDO') return res.status(400).json({ message: 'Telefone inválido (9 dígitos)' });
+    if (spe === 'EMAIL_INVALIDO') return res.status(400).json({ message: 'Email inválido' });
+    if (spe === 'ESTUDANTE_INVALIDO') return res.status(400).json({ message: 'Estudante inválido' });
+    if (!spe) {
+      if (tipo === 'estagio') return res.status(400).json({ message: 'Selecione o estudante' });
+      return res.status(400).json({ message: 'Faltam detalhes obrigatórios para o tipo selecionado' });
+    }
+    if (tipo === 'estagio' && spe.estudante_id) {
+      const est = await prisma.estudante.findUnique({ where: { id: spe.estudante_id } });
+      if (!est || !est.activo) return res.status(400).json({ message: 'Estudante não encontrado ou inactivo' });
+    }
 
     await validarAgendamentos(lab.id, ags, null);
     await validarMateriais(lab.id, mats);
@@ -420,10 +431,19 @@ router.put('/:id/full', rbac(...ACT_ROLES), async (req, res, next) => {
     }
     const mats = aplanarMateriais(ags);
 
-    await validarAgendamentos(novoLabId, ags, act.id);
-    await validarMateriais(novoLabId, mats);
-    const configuracao = await obterConfiguracaoGeral();
-    await validarParticipantesSessoes(novoTipo, novoLabId, ags, periodoDosDetalhes(novoTipo, detalhes), configuracao);
+    const spe = montarDetalhes(novoTipo, detalhes);
+    if (spe === 'TELEFONE_INVALIDO') return res.status(400).json({ message: 'Telefone inválido (9 dígitos)' });
+    if (spe === 'EMAIL_INVALIDO') return res.status(400).json({ message: 'Email inválido' });
+    if (spe === 'ESTUDANTE_INVALIDO') return res.status(400).json({ message: 'Estudante inválido' });
+    if (spe === null) {
+      if (novoTipo === 'estagio') return res.status(400).json({ message: 'Selecione o estudante' });
+      return res.status(400).json({ message: 'Faltam detalhes obrigatórios para o tipo selecionado' });
+    }
+    // validar existência/inactivo do estudante no estágio
+    if (novoTipo === 'estagio' && spe.estudante_id) {
+      const est = await prisma.estudante.findUnique({ where: { id: spe.estudante_id } });
+      if (!est || !est.activo) return res.status(400).json({ message: 'Estudante não encontrado ou inactivo' });
+    }
 
     const data = {};
     if (nome !== undefined) data.nome = nome;
@@ -436,6 +456,13 @@ router.put('/:id/full', rbac(...ACT_ROLES), async (req, res, next) => {
     const atualizado = await alterarComPermissao(act, req.user, async (tx) => {
       const up = await tx.actividade.update({ where: { id: act.id }, data, include: actInclude });
       const spe = montarDetalhes(novoTipo, detalhes);
+      if (spe === 'TELEFONE_INVALIDO') throw HTTP(400, 'Telefone inválido (9 dígitos)');
+      if (spe === 'EMAIL_INVALIDO') throw HTTP(400, 'Email inválido');
+      if (spe === 'ESTUDANTE_INVALIDO') throw HTTP(400, 'Estudante inválido');
+      if (spe === null) {
+        if (novoTipo === 'estagio') throw HTTP(400, 'Selecione o estudante');
+        throw HTTP(400, 'Faltam detalhes obrigatórios para o tipo selecionado');
+      }
       if (spe) await actualizarEspecialidade(tx, novoTipo, act.id, spe);
       await tx.agendamento.updateMany({ where: { actividade_id: act.id, activo: true }, data: { activo: false } });
       await crearAgendamentos(tx, act.id, ags);

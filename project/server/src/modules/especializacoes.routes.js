@@ -66,6 +66,13 @@ visitas.post('/', rbac(...ACT_ROLES), async (req, res, next) => {
     if (!actividade_id || !nome_visitante || !telefone || !email) {
       return res.status(400).json({ message: 'actividade_id, nome_visitante, telefone e email são obrigatórios' });
     }
+    const tel = String(telefone).replace(/\s/g, '');
+    if (!/^[0-9]{9}$/.test(tel)) {
+      return res.status(400).json({ message: 'Telefone inválido (9 dígitos)' });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) {
+      return res.status(400).json({ message: 'Email inválido' });
+    }
     const act = await prisma.actividade.findUnique({ where: { id: Number(actividade_id) } });
     if (!act || !act.activo) return res.status(404).json({ message: 'Atividade não encontrada' });
     // Regras 1 (estado) + 2 (autoria).
@@ -74,15 +81,15 @@ visitas.post('/', rbac(...ACT_ROLES), async (req, res, next) => {
       update: {
         nome_visitante,
         ...(instituicao ? { instituicao } : {}),
-        telefone,
-        email,
+        telefone: tel,
+        email: String(email),
       },
       create: {
         actividade_id: Number(actividade_id),
         nome_visitante,
         ...(instituicao ? { instituicao } : {}),
-        telefone,
-        email,
+        telefone: tel,
+        email: String(email),
       },
     }));
     res.status(200).json(toVisitaGet(result));
@@ -156,8 +163,16 @@ estagios.use(authRequired);
 estagios.post('/', rbac(...ACT_ROLES), async (req, res, next) => {
   try {
     const { actividade_id, estudante_id, data_inicio, data_fim } = req.body || {};
-    if (!actividade_id || !estudante_id || !data_inicio || !data_fim) {
+    if (!actividade_id || estudante_id == null || !data_inicio || !data_fim) {
       return res.status(400).json({ message: 'actividade_id, estudante_id, data_inicio e data_fim são obrigatórios' });
+    }
+    const estId = Number(estudante_id);
+    if (!Number.isInteger(estId) || estId < 1) {
+      return res.status(400).json({ message: 'estudante_id inválido' });
+    }
+    const est = await prisma.estudante.findUnique({ where: { id: estId } });
+    if (!est || !est.activo) {
+      return res.status(400).json({ message: 'Estudante não encontrado ou inactivo' });
     }
     const act = await prisma.actividade.findUnique({ where: { id: Number(actividade_id) } });
     if (!act || !act.activo) return res.status(404).json({ message: 'Atividade não encontrada' });
@@ -165,13 +180,13 @@ estagios.post('/', rbac(...ACT_ROLES), async (req, res, next) => {
     const result = await alterarComPermissao(act, req.user, (tx) => tx.estagio.upsert({
       where: { actividade_id: Number(actividade_id) },
       update: {
-        estudante_id: Number(estudante_id),
+        estudante_id: estId,
         data_inicio: new Date(data_inicio),
         data_fim: new Date(data_fim),
       },
       create: {
         actividade_id: Number(actividade_id),
-        estudante_id: Number(estudante_id),
+        estudante_id: estId,
         data_inicio: new Date(data_inicio),
         data_fim: new Date(data_fim),
       },

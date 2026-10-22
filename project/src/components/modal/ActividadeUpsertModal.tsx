@@ -251,9 +251,17 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
       // Só o Admin escolhe o responsável; nos restantes perfis é o próprio utilizador.
       if (isAdmin && !responsavelId) return 'Selecione o responsável da atividade';
       if (tipo === 'aula') return !cursoDisciplinaId ? 'Selecione a disciplina' : null;
-      if (tipo === 'visita') return (!nomeVisitante || !telefone || !emailVisitante) ? 'Preencha os dados do visitante' : null;
+      if (tipo === 'visita') {
+        if (!nomeVisitante) return 'Preencha o nome do visitante';
+        if (!telefone) return 'Preencha o telefone';
+        if (!/^[0-9]{9}$/.test(telefone)) return 'Telefone inválido (9 dígitos)';
+        if (!emailVisitante) return 'Preencha o email';
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVisitante)) return 'Email inválido';
+        return null;
+      }
       if (tipo === 'projecto' || tipo === 'estagio') {
         if (tipo === 'projecto' && !titulo) return 'Preencha o título';
+        if (tipo === 'estagio' && !estudanteId) return 'Seleccione o estudante';
         if (!dataInicio || !dataFim) return 'Preencha as datas';
         const today = new Date(); today.setHours(0, 0, 0, 0);
         const ini = new Date(dataInicio + 'T00:00:00');
@@ -630,14 +638,14 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
                   <Input id="vis-inst" value={instituicao} onChange={(e) => setInstituicao(e.target.value)} />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="vis-tel">Telefone</Label>
-                    <Input id="vis-tel" required value={telefone} onChange={(e) => setTelefone(e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="vis-email">Email</Label>
-                    <Input id="vis-email" type="email" required value={emailVisitante} onChange={(e) => setEmailVisitante(e.target.value)} />
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="vis-tel">Telefone</Label>
+                  <Input id="vis-tel" required value={telefone} onChange={(e) => setTelefone(e.target.value.replace(/[^0-9]/g, ''))} placeholder="Ex: 923456789" maxLength={9} inputMode="numeric" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="vis-email">Email</Label>
+                  <Input id="vis-email" type="email" required value={emailVisitante} onChange={(e) => setEmailVisitante(e.target.value)} placeholder="exemplo@gmail.com" />
+                </div>
                 </div>
               </>
             )}

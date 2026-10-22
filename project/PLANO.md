@@ -461,6 +461,27 @@ O passo «Materiais» do `ActividadeUpsertModal` usava `GET /materiais` (RBAC A,
 
 ---
 
+### 2.19. Validação de Estágio/Visita e correção de 500 — ✅ implementado
+
+> **Estado:** ✅ concluído (front + backend, **sem migração**, deploy pendente).
+> **Escopo:** tornar obrigatório o estudante no estágio, validar formato de visita (telefone 9-15 dígitos, email) e garantir respostas 400 claras (sem 500).
+
+#### Causa real do 500 (estágio sem estudante)
+No código anterior (HEAD), `montarDetalhes('estagio', det)` devolvia `null` quando `estudante_id` era nulo/ausente. Em `POST /actividades/full`, o código verificava `if (!spe) return res.status(400)...` — **isso devia devolver 400**. No entanto, consoante o caminho/teste manual (e em `PUT /actividades/:id/full` anterior a esta correção), a ausência podia levar a fluxos onde a validação não era explícita o suficiente ou o erro era propagado para `next(err)` gerando 500. Além disso, `POST /estagios` exigia `estudante_id` mas, caso a validação falhasse noutro ponto, o comportamento podia ser confuso. Com as correcções actuais, **todas** as variantes são validadas explicitamente: `estudante_id` em falta/null/""/0/"abc", inexistente ou inactivo devolvem **400** com mensagem clara (`«Seleccione o estudante»` / `«Estudante inválido»` / `«Estudante não encontrado ou inactivo»`).
+
+#### Como ficou
+- **Front (`ActividadeUpsertModal`)**: no passo 2, estágio exige `estudanteId` → `«Seleccione o estudante»`. Visita: telefone sanitizado a só dígitos (`maxLength=15`, `inputMode="numeric"`), email com `placeholder="exemplo@gmail.com"`. Validação no `getStepError(2)` com mensagens específicas; botão «Próximo»/submissão bloqueados até válido.
+- **Backend (`POST/PUT /actividades/full`)**: `montarDetalhes` para visita valida telefone sanitizado `^[0-9]{9,15}$` e email `^[^\s@]+@[^\s@]+\.[^\s@]+$`; para estágio valida `estudante_id` inteiro >=1 e verifica existência/activo na BD antes de gravar. Erros devolvem **400** (`«Telefone inválido (9 a 15 dígitos)»`, `«Email inválido»`, `«Seleccione o estudante»`, `«Estudante inválido»`, `«Estudante não encontrado ou inactivo»`).
+- **Backend (`POST /estagios`, `POST /visitas`)**: validação explícita com **400** em todos os casos de formato/inexistência/inactivo.
+
+#### Verificação (com IDs reais)
+- **Criar** (201): aula, visita, projecto, estágio com estudante válido.
+- **PUT /actividades/:id/full** (IDs reais): vazio/details incompletos → **400**; estágio `estudante_id` null/""/0/"abc"/999999/inactivo → **400**; visita tel com letras/curto e email inválido/sem ponto → **400**; visita e estágio válidos → **200** (dados gravados).
+- **POST /estagios** sem estudante → **400**; **POST /visitas** tel com letras/curto/email inválido/sem ponto → **400**.
+- **Browser**: estágio não avança sem estudante; visita aceita só dígitos e mostra erros por formato; criar/editar um de cada tipo funciona sem 403 novos.
+
+---
+
 ## 3. TELA DE CONFIGURAÇÃO DO SISTEMA (fluxo de aprovação configurável)
 
 > **Estado:** ✅ (E0 backend + E2 front) — `FluxoAprovacao` + `GET/PUT /configuracao/fluxo` + `/reset`, fila config-driven; `Configuracao.tsx` em `/configuracao` (A) com tabs "Fluxo de Aprovação" (reordenação up/down, nomes editáveis, checkboxes de cargos, guardar + repor padrão) e "Catálogos" (CRUD de unidades laboratoriais, categorias de material e unidades de medida).
