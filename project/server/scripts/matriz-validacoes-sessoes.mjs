@@ -16,6 +16,8 @@
  * Extras:
  *   A. RF13 — choque com sessão aprovada (POST e PUT /actividades/:id/full → 409)
  *   B. stock — material acima do stock (PUT /actividades/:id/full → 400)
+ *   C. obrigatoriedade por tipo — aula sem tema/turno/nº da turma e visita sem
+ *      instituição (POST/PUT /actividades/full, POST /aulas, POST /visitas → 400)
  *
  * Regras de segurança:
  *   - Cria apenas dados próprios com o prefixo TESTE-MATRIZ-<run>: atividades,
@@ -63,13 +65,27 @@ const startOfToday = () => new Date(new Date().getFullYear(), new Date().getMont
 
 function nextWeekdayOnOrAfter(day) {
   let d = new Date(day);
-  while (d.getDay() === 0 || d.getDay() === 6) d = addDays(d, 1);
+  while (d.getDay() === 0 || d.getDay() === 6 || ehFeriado(d)) d = addDays(d, 1);
   return d;
+}
+
+// Feriados activos conhecidos (preenchido no main antes de escolher dias de teste).
+// `feriado` é anual (mesmo dia/mês a partir do ano de registo); os restantes
+// valem só na data exacta. Mantém a matriz independente do calendário real.
+let feriadosConhecidos = [];
+
+function ehFeriado(d) {
+  const day = iso(d);
+  const md = day.slice(5);
+  return feriadosConhecidos.some((f) => {
+    if (f.tipo === 'feriado') return f.data.slice(5) === md && Number(day.slice(0, 4)) >= Number(f.data.slice(0, 4));
+    return f.data === day;
+  });
 }
 
 function firstWeekdayBetween(start, end) {
   for (let d = new Date(start); d <= end; d = addDays(d, 1)) {
-    if (d.getDay() !== 0 && d.getDay() !== 6) return d;
+    if (d.getDay() !== 0 && d.getDay() !== 6 && !ehFeriado(d)) return d;
   }
   return null;
 }
@@ -291,6 +307,12 @@ async function main() {
   }
   if (!holiday) throw new Error('não foi possível criar um feriado de teste sem conflito');
 
+  // Dias de teste (período, dia útil, choque, stock) nunca podem cair num
+  // feriado pré-existente — senão a regra do feriado mascara a regra testada.
+  const feriadosAtivos = await prisma.feriado.findMany({ where: { activo: true }, select: { data: true, tipo: true } });
+  feriadosConhecidos = feriadosAtivos.map((f) => ({ data: f.data.toISOString().slice(0, 10), tipo: f.tipo }));
+  feriadosConhecidos.push({ data: holiday.dia, tipo: 'ponte' });
+
   // ---------- atividades base ----------
   const periodStart = nextWeekdayOnOrAfter(addDays(today, 10));
   const periodEnd = addDays(periodStart, 10); // inclui dias úteis e o sábado seguinte
@@ -300,6 +322,12 @@ async function main() {
   if (!startInside) throw new Error('período de teste sem dia útil');
 
   const aulaDet = { curso_disciplina_id: cd.id, tema: `${RUN}-AULA`, turno: 'manha', numero_turma: 1 };
+  const visitaDet = {
+    nome_visitante: `${RUN}-VISITANTE`,
+    instituicao: `${RUN}-INSTITUICAO`,
+    telefone: '923456789',
+    email: 'teste@exemplo.com',
+  };
   const projLargoDet = {
     titulo: `${RUN}-PROJ-LARGO`,
     descricao: '',
@@ -325,6 +353,17 @@ async function main() {
       agendamentos: [{ ...aulaAg, hora_inicio: at(iso(startInside), '09:00:00'), hora_fim: at(iso(startInside), '10:00:00') }],
     },
     'A',
+  );
+  const V = await createFull(
+    {
+      nome: `${RUN}-VISITA-BASE`,
+      laboratorio_id: labMatriz.id,
+      tipo: 'visita',
+      responsavel_id: responsavelProjecto,
+      detalhes: visitaDet,
+      agendamentos: [{ hora_inicio: at(iso(startInside), '10:00:00'), hora_fim: at(iso(startInside), '11:00:00'), num_participantes: 5 }],
+    },
+    'V',
   );
   const P1 = await createFull(
     {
@@ -360,8 +399,8 @@ async function main() {
     },
     'P3',
   );
-  if (![A, P1, P2, P3].every((r) => r.status === 201)) {
-    throw new Error(`atividades base: ${JSON.stringify({ A, P1, P2, P3 })}`);
+  if (![A, P1, P2, P3, V].every((r) => r.status === 201)) {
+    throw new Error(`atividades base: ${JSON.stringify({ A, P1, P2, P3, V })}`);
   }
   const sessA = (await sessionsOf(A.json.id))[0];
   const sessP1 = (await sessionsOf(P1.json.id))[0];
@@ -502,6 +541,111 @@ async function main() {
     'sessões base intactas após a matriz',
     afterA.length === 1 && afterP1.length === 1 && afterP2.length === 1 && afterP3.length === 1 && afterA[0].id === sessA.id && afterP1[0].id === sessP1.id && afterP2[0].id === sessP2.id && afterP3[0].id === sessP3.id,
     `A=${afterA.length}, P1=${afterP1.length}, P2=${afterP2.length}, P3=${afterP3.length}`,
+  );
+
+  // ---------- C. obrigatoriedade de campos por tipo (400) ----------
+  // Aula: tema, turno e nº da turma (>= 1) obrigatórios; visita: instituição.
+  const agObrig = {
+    hora_inicio: at(weekday, '18:00:00'),
+    hora_fim: at(weekday, '19:00:00'),
+    num_participantes: validAulaParticipants,
+  };
+  const agObrigVisita = { ...agObrig, num_participantes: validProjectParticipants };
+  const aulaFullBody = (det) => ({
+    nome: `${RUN}-OBRIG-AULA`,
+    laboratorio_id: labMatriz.id,
+    tipo: 'aula',
+    responsavel_id: professor.id,
+    detalhes: det,
+    agendamentos: [agObrig],
+  });
+  const aulaPutBody = (det) => ({ tipo: 'aula', laboratorio_id: labMatriz.id, detalhes: det, agendamentos: [agObrig] });
+  const visitaFullBody = (det) => ({
+    nome: `${RUN}-OBRIG-VISITA`,
+    laboratorio_id: labMatriz.id,
+    tipo: 'visita',
+    responsavel_id: responsavelProjecto,
+    detalhes: det,
+    agendamentos: [agObrigVisita],
+  });
+  const visitaPutBody = (det) => ({ tipo: 'visita', laboratorio_id: labMatriz.id, detalhes: det, agendamentos: [agObrigVisita] });
+
+  const aulaObrig = [
+    { key: 'sem_tema', det: { ...aulaDet, tema: '   ' }, expect: 'Indique o tema', postAulas: { tema: '   ', turno: 'manha', numero_turma: 1 } },
+    { key: 'sem_turno', det: { ...aulaDet, turno: '' }, expect: 'Turno inválido', postAulas: { tema: aulaDet.tema, turno: '', numero_turma: 1 } },
+    { key: 'sem_numero_turma', det: { ...aulaDet, numero_turma: null }, expect: 'Indique o número da turma', postAulas: { tema: aulaDet.tema, turno: 'manha', numero_turma: null } },
+  ];
+  for (const c of aulaObrig) {
+    expectStatus(
+      `obrig. aula ${c.key} · POST /actividades/full`,
+      await api('POST', '/actividades/full', aulaFullBody(c.det), token),
+      400,
+      c.expect,
+    );
+    expectStatus(
+      `obrig. aula ${c.key} · PUT /actividades/:id/full`,
+      await api('PUT', `/actividades/${A.json.id}/full`, aulaPutBody(c.det), token),
+      400,
+      c.expect,
+    );
+    expectStatus(
+      `obrig. aula ${c.key} · POST /aulas`,
+      await api('POST', '/aulas', { actividade_id: A.json.id, curso_disciplina_id: cd.id, ...c.postAulas }, token),
+      400,
+      c.expect,
+    );
+  }
+
+  // Nº da turma indicado mas inválido (0, negativo, decimal, texto) — POST /aulas.
+  for (const [key, valor] of [['zero', 0], ['negativo', -1], ['decimal', 1.5], ['texto', 'abc']]) {
+    expectStatus(
+      `obrig. aula turma_${key} · POST /aulas`,
+      await api(
+        'POST',
+        '/aulas',
+        { actividade_id: A.json.id, curso_disciplina_id: cd.id, tema: aulaDet.tema, turno: 'manha', numero_turma: valor },
+        token,
+      ),
+      400,
+      'número da turma',
+    );
+  }
+
+  const visitaObrig = [
+    { key: 'sem_instituicao', det: { ...visitaDet, instituicao: undefined }, expect: 'Indique a instituição' },
+    { key: 'instituicao_vazia', det: { ...visitaDet, instituicao: '' }, expect: 'Indique a instituição' },
+    { key: 'instituicao_espacos', det: { ...visitaDet, instituicao: '   ' }, expect: 'Indique a instituição' },
+  ];
+  for (const c of visitaObrig) {
+    expectStatus(
+      `obrig. visita ${c.key} · POST /actividades/full`,
+      await api('POST', '/actividades/full', visitaFullBody(c.det), token),
+      400,
+      c.expect,
+    );
+  }
+  expectStatus(
+    'obrig. visita sem_instituicao · PUT /actividades/:id/full',
+    await api('PUT', `/actividades/${V.json.id}/full`, visitaPutBody({ ...visitaDet, instituicao: undefined }), token),
+    400,
+    'Indique a instituição',
+  );
+  expectStatus(
+    'obrig. visita sem_instituicao · POST /visitas',
+    await api(
+      'POST',
+      '/visitas',
+      {
+        actividade_id: V.json.id,
+        nome_visitante: visitaDet.nome_visitante,
+        instituicao: '   ',
+        telefone: visitaDet.telefone,
+        email: visitaDet.email,
+      },
+      token,
+    ),
+    400,
+    'Indique a instituição',
   );
 
   // ---------- A. RF13 — choque com sessão aprovada (dados próprios) ----------

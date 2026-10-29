@@ -265,13 +265,16 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
       if (isAdmin && !responsavelId) return 'Selecione o responsável da atividade';
       if (tipo === 'aula') {
         if (!cursoDisciplinaId) return 'Selecione a disciplina';
-        if (numeroTurma && (!Number.isInteger(Number(numeroTurma)) || Number(numeroTurma) < 1)) {
-          return 'O número da turma tem de ser 1 ou superior';
+        if (!tema.trim()) return 'Indique o tema';
+        if (!turno) return 'Seleccione o turno';
+        if (numeroTurma.trim() === '' || !Number.isInteger(Number(numeroTurma)) || Number(numeroTurma) < 1) {
+          return 'Indique o número da turma (mínimo 1)';
         }
         return null;
       }
       if (tipo === 'visita') {
         if (!nomeVisitante) return 'Preencha o nome do visitante';
+        if (!instituicao.trim()) return 'Indique a instituição';
         if (!telefone) return 'Preencha o telefone';
         if (!/^[0-9]{9}$/.test(telefone)) return 'Telefone inválido (9 dígitos)';
         if (!emailVisitante) return 'Preencha o email';
@@ -469,9 +472,9 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
 
       const detalhes =
         tipo === 'aula'
-          ? { curso_disciplina_id: Number(cursoDisciplinaId), tema, turno, numero_turma: numeroTurma.trim() === '' ? null : Number(numeroTurma) }
+          ? { curso_disciplina_id: Number(cursoDisciplinaId), tema: tema.trim(), turno, numero_turma: Number(numeroTurma) }
           : tipo === 'visita'
-            ? { nome_visitante: nomeVisitante, telefone, email: emailVisitante, ...(instituicao ? { instituicao } : {}) }
+            ? { nome_visitante: nomeVisitante, instituicao: instituicao.trim(), telefone, email: emailVisitante }
             : tipo === 'projecto'
               ? { titulo, descricao, data_inicio: dataInicio, data_fim: dataFim }
               : { estudante_id: Number(estudanteId), data_inicio: dataInicio, data_fim: dataFim };
@@ -645,14 +648,14 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
                 )}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Turno</Label>
+                    <Label>Turno *</Label>
                     <Select value={turno} onValueChange={setTurno}>
-                      <SelectTrigger><SelectValue placeholder="Selecionar turno...">{turnoLabel}</SelectValue></SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder="Seleccione o turno">{turnoLabel}</SelectValue></SelectTrigger>
                       <SelectContent>{TURNO_TIPO_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="num-turma">Nº da turma</Label>
+                    <Label htmlFor="num-turma">Nº da turma *</Label>
                     <NumberInput id="num-turma" value={numeroTurma} onValueChange={setNumeroTurma} placeholder="Ex: 1" min={1} allowDecimal={false} />
                   </div>
                 </div>
@@ -663,7 +666,7 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
                   </div>
                 )}
                 <div className="space-y-2">
-                  <Label htmlFor="tema">Tema</Label>
+                  <Label htmlFor="tema">Tema *</Label>
                   <Input id="tema" value={tema} onChange={(e) => setTema(e.target.value)} />
                 </div>
               </>
@@ -675,7 +678,7 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
                   <Input id="vis-nome" required value={nomeVisitante} onChange={(e) => setNomeVisitante(e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="vis-inst">Instituição de origem</Label>
+                  <Label htmlFor="vis-inst">Instituição de origem *</Label>
                   <Input id="vis-inst" value={instituicao} onChange={(e) => setInstituicao(e.target.value)} />
                 </div>
                 <div className="grid grid-cols-2 gap-4">

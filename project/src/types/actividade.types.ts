@@ -32,7 +32,7 @@ export interface ActividadeUpsert {
 
 export type ActividadeDetalhesPayload =
   | { curso_disciplina_id: number; tema: string; turno: string; numero_turma: number }
-  | { nome_visitante: string; instituicao?: string; telefone: string; email: string }
+  | { nome_visitante: string; instituicao: string; telefone: string; email: string }
   | { titulo: string; descricao: string; data_inicio: string; data_fim: string }
   | { estudante_id: number; data_inicio: string; data_fim: string };
 

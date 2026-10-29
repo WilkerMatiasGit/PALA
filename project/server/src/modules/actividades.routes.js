@@ -169,17 +169,19 @@ function montarDetalhes(tipo, det) {
   switch (tipo) {
     case 'aula': {
       if (d.curso_disciplina_id == null) return null;
-      const turno = d.turno === 'manha' || d.turno === 'tarde' ? d.turno : null;
-      // `numero_turma` é opcional (Int? na BD), mas quando é indicado tem de ser
-      // um inteiro >= 1. Antes era convertido em `null` em silêncio (0/negativo
-      // desaparecia sem aviso) e `Number()` aceitava booleanos/arrays.
+      const tema = typeof d.tema === 'string' ? d.tema.trim() : '';
+      if (!tema) return 'TEMA_OBRIGATORIO';
+      if (d.turno !== 'manha' && d.turno !== 'tarde') return 'TURNO_INVALIDO';
+      // `numero_turma` é obrigatório (inteiro >= 1): `undefined` = em falta,
+      // `null` = indicado mas inválido (0, negativo, decimal, texto, booleano…).
       const num = inteiroOpcional(d.numero_turma);
+      if (num === undefined) return 'TURMA_OBRIGATORIA';
       if (num === null) return 'TURMA_INVALIDA';
       return {
         curso_disciplina_id: Number(d.curso_disciplina_id),
-        tema: d.tema || '',
-        turno,
-        numero_turma: num === undefined ? null : num,
+        tema,
+        turno: d.turno,
+        numero_turma: num,
       };
     }
     case 'visita': {
@@ -187,7 +189,9 @@ function montarDetalhes(tipo, det) {
       if (!d.nome_visitante || !tel || !d.email) return null;
       if (!/^[0-9]{9}$/.test(tel)) return 'TELEFONE_INVALIDO';
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(d.email))) return 'EMAIL_INVALIDO';
-      return { nome_visitante: d.nome_visitante, instituicao: d.instituicao || null, telefone: tel, email: String(d.email) };
+      const instituicao = typeof d.instituicao === 'string' ? d.instituicao.trim() : '';
+      if (!instituicao) return 'INSTITUICAO_OBRIGATORIA';
+      return { nome_visitante: d.nome_visitante, instituicao, telefone: tel, email: String(d.email) };
     }
     case 'projecto':
       return d.titulo && d.data_inicio && d.data_fim
@@ -206,6 +210,23 @@ function montarDetalhes(tipo, det) {
     }
     default:
       return null;
+  }
+}
+
+// Mensagem de 400 para o resultado de `montarDetalhes` (token, `null` = em
+// falta, objecto = detalhes válidos). Devolve `null` quando não há erro.
+function mensagemDetalhes(spe, tipo) {
+  switch (spe) {
+    case 'TELEFONE_INVALIDO': return 'Telefone inválido (9 dígitos)';
+    case 'EMAIL_INVALIDO': return 'Email inválido';
+    case 'ESTUDANTE_INVALIDO': return 'Estudante inválido';
+    case 'TEMA_OBRIGATORIO': return 'Indique o tema.';
+    case 'TURNO_INVALIDO': return 'Turno inválido (manhã ou tarde).';
+    case 'TURMA_OBRIGATORIA': return 'Indique o número da turma (mínimo 1).';
+    case 'TURMA_INVALIDA': return 'O número da turma tem de ser um inteiro maior ou igual a 1.';
+    case 'INSTITUICAO_OBRIGATORIA': return 'Indique a instituição.';
+    case null: return tipo === 'estagio' ? 'Selecione o estudante' : 'Faltam detalhes obrigatórios para o tipo selecionado';
+    default: return null;
   }
 }
 
@@ -355,14 +376,8 @@ router.post('/full', rbac(...ACT_ROLES), async (req, res, next) => {
     const mats = aplanarMateriais(ags);
 
     const spe = montarDetalhes(tipo, detalhes);
-    if (spe === 'TELEFONE_INVALIDO') return res.status(400).json({ message: 'Telefone inválido (9 dígitos)' });
-    if (spe === 'EMAIL_INVALIDO') return res.status(400).json({ message: 'Email inválido' });
-    if (spe === 'ESTUDANTE_INVALIDO') return res.status(400).json({ message: 'Estudante inválido' });
-    if (spe === 'TURMA_INVALIDA') return res.status(400).json({ message: 'O número da turma tem de ser um inteiro maior ou igual a 1.' });
-    if (!spe) {
-      if (tipo === 'estagio') return res.status(400).json({ message: 'Selecione o estudante' });
-      return res.status(400).json({ message: 'Faltam detalhes obrigatórios para o tipo selecionado' });
-    }
+    const erroDetalhes = mensagemDetalhes(spe, tipo);
+    if (erroDetalhes) return res.status(400).json({ message: erroDetalhes });
     if (tipo === 'estagio' && spe.estudante_id) {
       const est = await prisma.estudante.findUnique({ where: { id: spe.estudante_id } });
       if (!est || !est.activo) return res.status(400).json({ message: 'Estudante não encontrado ou inactivo' });
@@ -439,14 +454,8 @@ router.put('/:id/full', rbac(...ACT_ROLES), async (req, res, next) => {
     const mats = aplanarMateriais(ags);
 
     const spe = montarDetalhes(novoTipo, detalhes);
-    if (spe === 'TELEFONE_INVALIDO') return res.status(400).json({ message: 'Telefone inválido (9 dígitos)' });
-    if (spe === 'EMAIL_INVALIDO') return res.status(400).json({ message: 'Email inválido' });
-    if (spe === 'ESTUDANTE_INVALIDO') return res.status(400).json({ message: 'Estudante inválido' });
-    if (spe === 'TURMA_INVALIDA') return res.status(400).json({ message: 'O número da turma tem de ser um inteiro maior ou igual a 1.' });
-    if (spe === null) {
-      if (novoTipo === 'estagio') return res.status(400).json({ message: 'Selecione o estudante' });
-      return res.status(400).json({ message: 'Faltam detalhes obrigatórios para o tipo selecionado' });
-    }
+    const erroDetalhes = mensagemDetalhes(spe, novoTipo);
+    if (erroDetalhes) return res.status(400).json({ message: erroDetalhes });
     // validar existência/inactivo do estudante no estágio
     if (novoTipo === 'estagio' && spe.estudante_id) {
       const est = await prisma.estudante.findUnique({ where: { id: spe.estudante_id } });
@@ -476,14 +485,8 @@ router.put('/:id/full', rbac(...ACT_ROLES), async (req, res, next) => {
     const atualizado = await alterarComPermissao(act, req.user, async (tx) => {
       const up = await tx.actividade.update({ where: { id: act.id }, data, include: actInclude });
       const spe = montarDetalhes(novoTipo, detalhes);
-      if (spe === 'TELEFONE_INVALIDO') throw HTTP(400, 'Telefone inválido (9 dígitos)');
-      if (spe === 'EMAIL_INVALIDO') throw HTTP(400, 'Email inválido');
-      if (spe === 'ESTUDANTE_INVALIDO') throw HTTP(400, 'Estudante inválido');
-      if (spe === 'TURMA_INVALIDA') throw HTTP(400, 'O número da turma tem de ser um inteiro maior ou igual a 1.');
-      if (spe === null) {
-        if (novoTipo === 'estagio') throw HTTP(400, 'Selecione o estudante');
-        throw HTTP(400, 'Faltam detalhes obrigatórios para o tipo selecionado');
-      }
+      const erroDetalhes = mensagemDetalhes(spe, novoTipo);
+      if (erroDetalhes) throw HTTP(400, erroDetalhes);
       if (spe) await actualizarEspecialidade(tx, novoTipo, act.id, spe);
       await tx.agendamento.updateMany({ where: { actividade_id: act.id, activo: true }, data: { activo: false } });
       await crearAgendamentos(tx, act.id, ags);

@@ -25,14 +25,23 @@ aulas.post('/', rbac(...ACT_ROLES), async (req, res, next) => {
     if (!actividade_id || !curso_disciplina_id) {
       return res.status(400).json({ message: 'actividade_id e curso_disciplina_id são obrigatórios' });
     }
-    const normTurno = turno === 'manha' || turno === 'tarde' ? turno : null;
-    // `numero_turma` é opcional, mas quando indicado tem de ser inteiro >= 1
-    // (antes, 0/negativo era convertido em `null` em silêncio).
+    const temaNorm = typeof tema === 'string' ? tema.trim() : '';
+    if (!temaNorm) {
+      return res.status(400).json({ message: 'Indique o tema.' });
+    }
+    if (turno !== 'manha' && turno !== 'tarde') {
+      return res.status(400).json({ message: 'Turno inválido (manhã ou tarde).' });
+    }
+    // `numero_turma` é obrigatório, inteiro >= 1 (undefined = em falta,
+    // null = indicado mas inválido: 0, negativo, decimal, texto, booleano…).
     const normNumero = inteiroOpcional(numero_turma);
+    if (normNumero === undefined) {
+      return res.status(400).json({ message: 'Indique o número da turma (mínimo 1).' });
+    }
     if (normNumero === null) {
       return res.status(400).json({ message: 'O número da turma tem de ser um inteiro maior ou igual a 1.' });
     }
-    const finalNumero = normNumero === undefined ? null : normNumero;
+    const finalNumero = normNumero;
     const act = await prisma.actividade.findUnique({ where: { id: Number(actividade_id) } });
     if (!act || !act.activo) return res.status(404).json({ message: 'Atividade não encontrada' });
     // Regras 1 (estado) + 2 (autoria).
@@ -40,15 +49,15 @@ aulas.post('/', rbac(...ACT_ROLES), async (req, res, next) => {
       where: { actividade_id: Number(actividade_id) },
       update: {
         curso_disciplina_id: Number(curso_disciplina_id),
-        tema: tema || '',
-        turno: normTurno,
+        tema: temaNorm,
+        turno,
         numero_turma: finalNumero,
       },
       create: {
         actividade_id: Number(actividade_id),
         curso_disciplina_id: Number(curso_disciplina_id),
-        tema: tema || '',
-        turno: normTurno,
+        tema: temaNorm,
+        turno,
         numero_turma: finalNumero,
       },
       include: cdInclude,
@@ -72,6 +81,10 @@ visitas.post('/', rbac(...ACT_ROLES), async (req, res, next) => {
     if (!actividade_id || !nome_visitante || !telefone || !email) {
       return res.status(400).json({ message: 'actividade_id, nome_visitante, telefone e email são obrigatórios' });
     }
+    const instituicaoNorm = typeof instituicao === 'string' ? instituicao.trim() : '';
+    if (!instituicaoNorm) {
+      return res.status(400).json({ message: 'Indique a instituição.' });
+    }
     const tel = String(telefone).replace(/\s/g, '');
     if (!/^[0-9]{9}$/.test(tel)) {
       return res.status(400).json({ message: 'Telefone inválido (9 dígitos)' });
@@ -86,14 +99,14 @@ visitas.post('/', rbac(...ACT_ROLES), async (req, res, next) => {
       where: { actividade_id: Number(actividade_id) },
       update: {
         nome_visitante,
-        ...(instituicao ? { instituicao } : {}),
+        instituicao: instituicaoNorm,
         telefone: tel,
         email: String(email),
       },
       create: {
         actividade_id: Number(actividade_id),
         nome_visitante,
-        ...(instituicao ? { instituicao } : {}),
+        instituicao: instituicaoNorm,
         telefone: tel,
         email: String(email),
       },

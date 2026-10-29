@@ -520,6 +520,46 @@ No código anterior (HEAD), `montarDetalhes('estagio', det)` devolvia `null` qua
 
 ---
 
+### 2.21. Build da Vercel + campos obrigatórios por tipo + smoke de fluxo — ✅ implementado
+
+> **Estado:** ✅ concluído (backend + front + 2 scripts; **sem migração**, deploy pendente).
+> **Escopo:** destravar o build da Vercel (falhava com `TS2322`), tornar **obrigatórios** os campos que a realidade exige por tipo de atividade, e guardar no repositório um smoke de fluxo completo dos 4 tipos. A tabela de decisão front/backend e a causa do turno estão em §2.21.2.
+
+#### 2.21.1. Build da Vercel (Parte 0)
+
+- **O que a Vercel corre:** `vercel.json` → `buildCommand: npm run vercel-build`; o script é `prisma generate --schema server/prisma/schema.prisma && npm run build` e `build` é `tsc -b && vite build`. Este é o **critério oficial de typecheck** (ver `AGENTS.md` §6 «Como verificar»).
+- **Erro reproduzido:** `ActividadeUpsertModal.tsx(481,9) TS2322 … Type 'undefined' is not assignable to type 'string'` (exit 2). Causa: o payload de detalhes podia enviar `numero_turma: undefined` (o tipo dizia `string`/opcional) e o `getStepError` devolvia `string | null | undefined`.
+- **Correcção:** `ActividadeDetalhesPayload` passou a espelhar a realidade (aula: `numero_turma: number`; visita: `instituicao: string`), o payload envia `Number(numeroTurma)` e o erro de passo foi estreitado **sem asserções** (sem `any`/`as any`/`@ts-ignore`/`@ts-expect-error`; `strict` intacto).
+- **Falso «0 erros» anterior:** `tsc --noEmit -p tsconfig.app.json` **detectava** o erro (exit 2), mas o comando usado antes (`cmd /c "... & echo EXIT=%errorlevel%"`) expandia `%errorlevel%` **antes** de correr o `tsc`, imprimindo sempre 0. O build só é válido quando o próprio `npm run vercel-build` termina com **exit 0**.
+- **Resultado:** `cmd /c "npm run vercel-build"` → exit **0** (inclui `vite build`).
+
+#### 2.21.2. Tabela de obrigatoriedade (auditoria front vs. backend)
+
+| Tipo | Campo | Antes (front) | Antes (backend) | Decisão |
+|---|---|---|---|---|
+| aula | `curso_disciplina_id` | obrigatório | obrigatório | mantém |
+| aula | `tema` | opcional | opcional | **obrigatório** |
+| aula | `turno` | pré-seleccionado `manha` | opcional/ignorado | **obrigatório**, sem pré-selecção |
+| aula | `numero_turma` | opcional | opcional (0/negativo → `null` silencioso) | **obrigatório**, inteiro `>= 1` |
+| visita | `instituicao` | opcional | opcional | **obrigatório** |
+| visita | `nome_visitante`/`telefone`/`email` | opcionais | opcionais (telefone/email validados se preenchidos) | mantém |
+| projeto | `titulo`, `data_inicio`, `data_fim` | obrigatórios | obrigatórios | mantém |
+| estágio | `estudante_id`, `data_inicio`, `data_fim` | obrigatórios | obrigatórios | mantém |
+
+- **Porque o turno passava sem escolha:** o formulário inicializava o estado com `'manha'` (`useState('manha')`), pelo que o Select **nunca ficava vazio** e o pedido seguia sempre com um turno válido; o backend, por sua vez, aceitava a ausência do campo. O utilizador não conseguia distinguir «não escolhi» de «escolhi manhã». Passou a `useState('')` com placeholder «Seleccione o turno» + erro de passo.
+- **Outras discrepâncias encontradas na auditoria:** apenas reportadas, não alteradas (ex.: `nome_visitante` continua opcional; coerções numéricas permissivas listadas em §2.20 item 8).
+
+#### 2.21.3. Implementação
+
+- **Backend:** `montarDetalhes` (`actividades.routes.js`) valida `tema`, `turno` (só `manha`/`tarde`), `numero_turma` (presença + `inteiroOpcional`) e `instituicao`; nulo, vazio e **só espaços** contam como ausente. Devolve tokens internos que `mensagemDetalhes(spe, tipo)` traduz em **400** — aplicado a `POST /actividades/full`, `PUT /actividades/:id/full`, `POST /aulas` e `POST /visitas`.
+- **Front:** `getStepError(2)` devolve «Indique o tema», «Seleccione o turno», «Indique o número da turma (mínimo 1)» e «Indique a instituição»; labels com ` *`; turno sem pré-selecção. Lista de feriados anuais com espaço antes do parêntese (`02/11/2026 (em 2027: 02/11/2027)`), sem alterar o formato.
+- **Scripts:** `matriz-validacoes-sessoes.mjs` ganhou a secção «C. obrigatoriedade por tipo» (aula sem tema/turno/turma, turma `0`/`-1`/`1.5`/texto, visita sem/vazia/só espaços) → **50/50**; novo `smoke-fluxo-atividades.mjs` → **38/38** (detalhes em `AGENTS.md` §6).
+- **Dados existentes (só leitura, nada alterado):** 16 aulas activas e 4 visitas activas; **1 aula sem tema** (aula 5 / atividade 8 «teste novamente»), **0 sem turno**, **1 sem `numero_turma`** (aula 84 / atividade 91 «mudando nome») e **1 visita sem instituição** (visita 15 / atividade 82 «X»). Não foram corrigidos — ficam como legado (os DTOs toleram `null`).
+- **Sobreposição no Supervisor (verificação 1.7, só leitura + teste):** o Supervisor **não** revalida choque ao aprovar (as decisões apenas mudam estado). Duas atividades pendentes no mesmo laboratório/horário foram **ambas aprovadas** (DLab + Supervisor), enquanto um `POST /agendamentos` novo sobre uma sessão já aprovada continua a devolver **409** (RF13). Decisão de produto pendente: avaliar se a aprovação do Supervisor deve revalidar RF13 (hoje não revalida).
+- **Verificação:** matriz **50/50**, smoke **38/38**, `lint` 0 erros (17 warnings pré-existentes), `npm run vercel-build` exit **0**; browser (professor) confirmou as 4 mensagens, criou e editou os 4 tipos sem 403/5xx novos (dados `TESTE-BROWSER-*` apagados por id). Config reposta a `permitir_fim_semana=false` / `permitir_feriados=false`.
+
+---
+
 ## 3. TELA DE CONFIGURAÇÃO DO SISTEMA (fluxo de aprovação configurável)
 
 > **Estado:** ✅ (E0 backend + E2 front) — `FluxoAprovacao` + `GET/PUT /configuracao/fluxo` + `/reset`, fila config-driven; `Configuracao.tsx` em `/configuracao` (A) com tabs "Fluxo de Aprovação" (reordenação up/down, nomes editáveis, checkboxes de cargos, guardar + repor padrão) e "Catálogos" (CRUD de unidades laboratoriais, categorias de material e unidades de medida).

@@ -414,8 +414,8 @@ function FeriadosPainel({ podeEditar }: { podeEditar: boolean }) {
                     <TableCell>
                       {fmtBR(f.data.slice(0, 10))}
                       {filtros.ano && f.tipo === 'feriado' && Number(filtros.ano) !== Number(f.data.slice(0, 4)) && (
-                        <span className="ml-1 text-xs text-muted-foreground">
-                          (em {filtros.ano}: {fmtBR(`${filtros.ano}-${f.data.slice(5, 10)}`)})
+                        <span className="text-xs text-muted-foreground">
+                          {' (em '}{filtros.ano}: {fmtBR(`${filtros.ano}-${f.data.slice(5, 10)}`)})
                         </span>
                       )}
                     </TableCell>
