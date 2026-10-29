@@ -15,17 +15,22 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { NumberInput } from '@/components/ui/number-input';
 import { Switch } from '@/components/ui/switch';
 import { ErrorState } from '@/components/ui/error-state';
+import { FiltersBar } from '@/components/ui/filters-bar';
+import { SimplePagination } from '@/components/ui/simple-pagination';
+import { FeriadoUpsertModal } from '@/components/modal/FeriadoUpsertModal';
 import { configuracaoService } from '@/services/configuracao.service';
 import { unidadesLaboratoriaisService, categoriasMaterialService, unidadesService } from '@/services/catalogos.service';
 import { laboratoriosService } from '@/services/laboratorios.service';
 import { UTILIZADOR_TIPO_LABELS, ACTIVIDADE_TIPO_LABELS } from '@/services/enums';
 import type { UtilizadorTipo, ActividadeTipo } from '@/services/enums';
-import type { FluxoEtapaUpsert } from '@/types/configuracao.types';
+import type { FluxoEtapaUpsert, FeriadoGet } from '@/types/configuracao.types';
 import type { CatalogoGet } from '@/types/catalogo.types';
 import type { LaboratorioGet } from '@/types/laboratorio.types';
 import { ALL_ROLES, hasRole } from '@/utils/roleGuard';
 import { useAuth } from '@/context/AuthContext';
-import { Plus, Trash2, ArrowUp, ArrowDown, FlaskConical, Tags, Ruler, Settings, Circle, AlertTriangle } from 'lucide-react';
+import { PAGE_SIZE, FERIADO_TIPO_LABEL, FERIADO_TIPO_OPTIONS } from '@/utils/constants';
+import { fmtBR, toDateInput } from '@/utils/dateInput';
+import { Plus, Trash2, ArrowUp, ArrowDown, FlaskConical, Tags, Ruler, Settings, Circle, AlertTriangle, CalendarDays } from 'lucide-react';
 
 type CatalogoService = typeof unidadesLaboratoriaisService;
 
@@ -284,8 +289,177 @@ function LimitesParticipantesPainel({ podeEditar }: { podeEditar: boolean }) {
   );
 }
 
+function FeriadosPainel({ podeEditar }: { podeEditar: boolean }) {
+  const [itens, setItens] = useState<FeriadoGet[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filtros, setFiltros] = useState<Record<string, string>>({});
+  const [page, setPage] = useState(1);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<FeriadoGet | null>(null);
+  const [paraRemover, setParaRemover] = useState<FeriadoGet | null>(null);
+
+  const load = () => {
+    setLoading(true);
+    configuracaoService
+      .listFeriados()
+      .then(setItens)
+      .catch((err) => toast.error(err instanceof Error ? err.message : 'Erro ao carregar os feriados'))
+      .finally(() => setLoading(false));
+  };
+  useEffect(() => { load(); }, []);
+
+  const filtrados = itens.filter((f) => {
+    const nome = (filtros.nome ?? '').toLowerCase();
+    if (nome && !f.nome.toLowerCase().includes(nome)) return false;
+    if (filtros.tipo && f.tipo !== filtros.tipo) return false;
+    if (filtros.ano) {
+      const ano = Number(filtros.ano);
+      const anoFeriado = Number(toDateInput(f.data).slice(0, 4));
+      // `tipo = 'feriado'` repete-se todos os anos (do ano de registo em diante);
+      // os restantes tipos só se aplicam na data exacta.
+      const aplica = f.tipo === 'feriado' ? ano >= anoFeriado : ano === anoFeriado;
+      if (!aplica) return false;
+    }
+    return true;
+  });
+  const totalPages = Math.max(1, Math.ceil(filtrados.length / PAGE_SIZE));
+  const pagina = Math.min(page, totalPages);
+  const visiveis = filtrados.slice((pagina - 1) * PAGE_SIZE, pagina * PAGE_SIZE);
+
+  // Anos oferecidos no filtro: o actual, o seguinte e os que existem na lista.
+  // Um feriado anual registado em 2026 continua a aplicar-se em 2027+.
+  const anoActual = new Date().getFullYear();
+  const anosDisponiveis = (() => {
+    const anos = new Set<number>([anoActual, anoActual + 1]);
+    for (const f of itens) {
+      const ano = Number(toDateInput(f.data).slice(0, 4));
+      if (Number.isInteger(ano) && ano > 0) anos.add(ano);
+    }
+    return [...anos].sort((a, b) => a - b);
+  })();
+
+  const openForm = (feriado?: FeriadoGet) => {
+    setEditing(feriado ?? null);
+    setModalOpen(true);
+  };
+
+  const remover = async () => {
+    if (!paraRemover) return;
+    try {
+      await configuracaoService.removeFeriado(paraRemover.id);
+      toast.success('Feriado removido');
+      setParaRemover(null);
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao remover o feriado');
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex-row items-center justify-between space-y-0">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <CalendarDays className="h-4 w-4" /> Feriados
+        </CardTitle>
+        {podeEditar && (
+          <Button size="sm" onClick={() => openForm()}>
+            <Plus className="mr-1 h-4 w-4" /> Novo feriado
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent>
+        <p className="mb-4 text-sm text-muted-foreground">
+          Os dias registados são bloqueados em pedidos novos de sessões quando a regra «Permitir feriados» está
+          desligada (separador «Regras de agendamento»). Sessões já existentes não são alteradas.
+        </p>
+        <FiltersBar
+          fields={[
+            { key: 'nome', label: 'Nome', type: 'text', placeholder: 'Pesquisar feriado' },
+            {
+              key: 'tipo',
+              label: 'Tipo',
+              type: 'select',
+              options: FERIADO_TIPO_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+            },
+            {
+              key: 'ano',
+              label: 'Ano',
+              type: 'select',
+              options: anosDisponiveis.map((a) => ({ value: String(a), label: String(a) })),
+            },
+          ]}
+          values={filtros}
+          onChange={(key, value) => { setFiltros((f) => ({ ...f, [key]: value })); setPage(1); }}
+          onReset={() => { setFiltros({}); setPage(1); }}
+        />
+        {loading ? (
+          <div className="flex h-24 items-center justify-center"><Spinner /></div>
+        ) : visiveis.length === 0 ? (
+          <EmptyState icon={Circle} title={itens.length === 0 ? 'Sem feriados registados' : 'Sem resultados'} />
+        ) : (
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nome</TableHead>
+                  <TableHead className="w-32">Data</TableHead>
+                  <TableHead className="w-48">Tipo</TableHead>
+                  {podeEditar && <TableHead className="w-40 text-right">Ações</TableHead>}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {visiveis.map((f) => (
+                  <TableRow key={f.id}>
+                    <TableCell className="font-medium">{f.nome}</TableCell>
+                    <TableCell>
+                      {fmtBR(f.data.slice(0, 10))}
+                      {filtros.ano && f.tipo === 'feriado' && Number(filtros.ano) !== Number(f.data.slice(0, 4)) && (
+                        <span className="ml-1 text-xs text-muted-foreground">
+                          (em {filtros.ano}: {fmtBR(`${filtros.ano}-${f.data.slice(5, 10)}`)})
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell>{FERIADO_TIPO_OPTIONS.find((o) => o.value === f.tipo)?.label ?? FERIADO_TIPO_LABEL[f.tipo] ?? f.tipo}</TableCell>
+                    {podeEditar && (
+                      <TableCell className="text-right">
+                        <Button size="sm" variant="ghost" onClick={() => openForm(f)}>Editar</Button>
+                        <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setParaRemover(f)}>
+                          Remover
+                        </Button>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <SimplePagination page={pagina} totalPages={totalPages} onPageChange={setPage} />
+          </>
+        )}
+      </CardContent>
+
+      <FeriadoUpsertModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        feriado={editing}
+        onSaved={load}
+      />
+
+      <ConfirmDialog
+        open={!!paraRemover}
+        onOpenChange={(v) => !v && setParaRemover(null)}
+        title="Remover feriado"
+        description={`Pretende remover "${paraRemover?.nome}"? As sessões existentes não são alteradas.`}
+        confirmLabel="Remover"
+        variant="destructive"
+        onConfirm={remover}
+      />
+    </Card>
+  );
+}
+
 function RegrasAgendamentoPainel() {
   const [permitirFimSemana, setPermitirFimSemana] = useState(false);
+  const [permitirFeriados, setPermitirFeriados] = useState(false);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -295,7 +469,10 @@ function RegrasAgendamentoPainel() {
     setErro(null);
     configuracaoService
       .getGeral()
-      .then((c) => setPermitirFimSemana(c.permitir_fim_semana))
+      .then((c) => {
+        setPermitirFimSemana(c.permitir_fim_semana);
+        setPermitirFeriados(c.permitir_feriados);
+      })
       .catch((err) => setErro(err instanceof Error ? err.message : 'Erro ao carregar as regras de agendamento'))
       .finally(() => setLoading(false));
   };
@@ -304,8 +481,12 @@ function RegrasAgendamentoPainel() {
   const guardar = async () => {
     setSaving(true);
     try {
-      const updated = await configuracaoService.updateGeral({ permitir_fim_semana: permitirFimSemana });
+      const updated = await configuracaoService.updateGeral({
+        permitir_fim_semana: permitirFimSemana,
+        permitir_feriados: permitirFeriados,
+      });
       setPermitirFimSemana(updated.permitir_fim_semana);
+      setPermitirFeriados(updated.permitir_feriados);
       toast.success('Regras de agendamento atualizadas');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erro ao guardar as regras de agendamento');
@@ -333,6 +514,16 @@ function RegrasAgendamentoPainel() {
             </p>
           </div>
           <Switch id="permitir-fim-semana" checked={permitirFimSemana} onCheckedChange={setPermitirFimSemana} />
+        </div>
+        <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-3">
+          <div className="space-y-0.5">
+            <Label htmlFor="permitir-feriados">Permitir agendamentos em feriados</Label>
+            <p className="text-xs text-muted-foreground">
+              Quando desligado, os dias registados no separador «Feriados» ficam bloqueados em pedidos novos de
+              sessões. Sessões já existentes não são alteradas.
+            </p>
+          </div>
+          <Switch id="permitir-feriados" checked={permitirFeriados} onCheckedChange={setPermitirFeriados} />
         </div>
         <div className="flex justify-end">
           <Button onClick={guardar} disabled={saving}>{saving ? <Spinner className="mr-2" /> : null}Guardar regras</Button>
@@ -440,6 +631,7 @@ export default function Configuracao() {
           <TabsTrigger value="fluxo">Fluxo de Aprovação</TabsTrigger>
           <TabsTrigger value="catalogos">Catálogos</TabsTrigger>
           <TabsTrigger value="limites">Limites de Participantes</TabsTrigger>
+          <TabsTrigger value="feriados">Feriados</TabsTrigger>
           <TabsTrigger value="regras">Regras de agendamento</TabsTrigger>
         </TabsList>
 
@@ -525,6 +717,10 @@ export default function Configuracao() {
 
         <TabsContent value="limites">
           <LimitesParticipantesPainel podeEditar={podeEditar} />
+        </TabsContent>
+
+        <TabsContent value="feriados">
+          <FeriadosPainel podeEditar={podeEditar} />
         </TabsContent>
 
         <TabsContent value="regras">

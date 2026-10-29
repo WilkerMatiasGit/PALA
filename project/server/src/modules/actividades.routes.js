@@ -10,8 +10,9 @@ import {
   toAgendamentoMaterialGet,
   toAgendamentoGet,
 } from '../utils/dto.js';
-import { validarSessao } from '../utils/validarSessao.js';
+import { validarSessao, obterFeriadosParaValidacao } from '../utils/validarSessao.js';
 import { obterConfiguracaoGeral } from '../utils/configuracao.js';
+import { inteiroOpcional } from '../utils/numeros.js';
 import {
   podeAlterarActividade,
   alterarComPermissao,
@@ -169,12 +170,16 @@ function montarDetalhes(tipo, det) {
     case 'aula': {
       if (d.curso_disciplina_id == null) return null;
       const turno = d.turno === 'manha' || d.turno === 'tarde' ? d.turno : null;
-      const num = Number(d.numero_turma);
+      // `numero_turma` é opcional (Int? na BD), mas quando é indicado tem de ser
+      // um inteiro >= 1. Antes era convertido em `null` em silêncio (0/negativo
+      // desaparecia sem aviso) e `Number()` aceitava booleanos/arrays.
+      const num = inteiroOpcional(d.numero_turma);
+      if (num === null) return 'TURMA_INVALIDA';
       return {
         curso_disciplina_id: Number(d.curso_disciplina_id),
         tema: d.tema || '',
         turno,
-        numero_turma: Number.isInteger(num) && num > 0 ? num : null,
+        numero_turma: num === undefined ? null : num,
       };
     }
     case 'visita': {
@@ -315,9 +320,9 @@ const ag = await tx.agendamento.create({
 // POST /actividades/full — criação atómica (tudo ou nada)
 // Validação de participantes por sessão (mesma regra de POST /agendamentos):
 // aplica-se às sessões criadas/recriadas pela submissão.
-async function validarParticipantesSessoes(tipo, labId, ags, periodo, configuracao) {
+async function validarParticipantesSessoes(tipo, labId, ags, periodo, configuracao, feriados) {
   for (const g of ags) {
-    await validarSessao({ tipo, laboratorio_id: labId, num_participantes: g.num_participantes, hora_inicio: g.hora_inicio, hora_fim: g.hora_fim }, { periodo, configuracao });
+    await validarSessao({ tipo, laboratorio_id: labId, num_participantes: g.num_participantes, hora_inicio: g.hora_inicio, hora_fim: g.hora_fim }, { periodo, configuracao, feriados });
   }
 }
 
@@ -353,6 +358,7 @@ router.post('/full', rbac(...ACT_ROLES), async (req, res, next) => {
     if (spe === 'TELEFONE_INVALIDO') return res.status(400).json({ message: 'Telefone inválido (9 dígitos)' });
     if (spe === 'EMAIL_INVALIDO') return res.status(400).json({ message: 'Email inválido' });
     if (spe === 'ESTUDANTE_INVALIDO') return res.status(400).json({ message: 'Estudante inválido' });
+    if (spe === 'TURMA_INVALIDA') return res.status(400).json({ message: 'O número da turma tem de ser um inteiro maior ou igual a 1.' });
     if (!spe) {
       if (tipo === 'estagio') return res.status(400).json({ message: 'Selecione o estudante' });
       return res.status(400).json({ message: 'Faltam detalhes obrigatórios para o tipo selecionado' });
@@ -365,7 +371,8 @@ router.post('/full', rbac(...ACT_ROLES), async (req, res, next) => {
     await validarAgendamentos(lab.id, ags, null);
     await validarMateriais(lab.id, mats);
     const configuracao = await obterConfiguracaoGeral();
-    await validarParticipantesSessoes(tipo, lab.id, ags, periodoDosDetalhes(tipo, detalhes), configuracao);
+    const feriados = await obterFeriadosParaValidacao();
+    await validarParticipantesSessoes(tipo, lab.id, ags, periodoDosDetalhes(tipo, detalhes), configuracao, feriados);
 
     const novo = await prisma.$transaction(async (tx) => {
       const act = await tx.actividade.create({
@@ -435,6 +442,7 @@ router.put('/:id/full', rbac(...ACT_ROLES), async (req, res, next) => {
     if (spe === 'TELEFONE_INVALIDO') return res.status(400).json({ message: 'Telefone inválido (9 dígitos)' });
     if (spe === 'EMAIL_INVALIDO') return res.status(400).json({ message: 'Email inválido' });
     if (spe === 'ESTUDANTE_INVALIDO') return res.status(400).json({ message: 'Estudante inválido' });
+    if (spe === 'TURMA_INVALIDA') return res.status(400).json({ message: 'O número da turma tem de ser um inteiro maior ou igual a 1.' });
     if (spe === null) {
       if (novoTipo === 'estagio') return res.status(400).json({ message: 'Selecione o estudante' });
       return res.status(400).json({ message: 'Faltam detalhes obrigatórios para o tipo selecionado' });
@@ -444,6 +452,18 @@ router.put('/:id/full', rbac(...ACT_ROLES), async (req, res, next) => {
       const est = await prisma.estudante.findUnique({ where: { id: spe.estudante_id } });
       if (!est || !est.activo) return res.status(400).json({ message: 'Estudante não encontrado ou inactivo' });
     }
+
+    // RF13 (choque com sessões aprovadas) e RF17 (stock) — a edição volta a
+    // passar pelas mesmas validações da criação. `act.id` é excluído do choque
+    // porque as sessões antigas desta atividade vão ser substituídas.
+    await validarAgendamentos(novoLabId, ags, act.id);
+    await validarMateriais(novoLabId, mats);
+
+    // Validação das sessões recriadas (participantes, futuro/período, fim de
+    // semana e feriados) — a edição volta a passar pelo mesmo filtro da criação.
+    const configuracao = await obterConfiguracaoGeral();
+    const feriados = await obterFeriadosParaValidacao();
+    await validarParticipantesSessoes(novoTipo, lab.id, ags, periodoDosDetalhes(novoTipo, detalhes), configuracao, feriados);
 
     const data = {};
     if (nome !== undefined) data.nome = nome;
@@ -459,6 +479,7 @@ router.put('/:id/full', rbac(...ACT_ROLES), async (req, res, next) => {
       if (spe === 'TELEFONE_INVALIDO') throw HTTP(400, 'Telefone inválido (9 dígitos)');
       if (spe === 'EMAIL_INVALIDO') throw HTTP(400, 'Email inválido');
       if (spe === 'ESTUDANTE_INVALIDO') throw HTTP(400, 'Estudante inválido');
+      if (spe === 'TURMA_INVALIDA') throw HTTP(400, 'O número da turma tem de ser um inteiro maior ou igual a 1.');
       if (spe === null) {
         if (novoTipo === 'estagio') throw HTTP(400, 'Selecione o estudante');
         throw HTTP(400, 'Faltam detalhes obrigatórios para o tipo selecionado');

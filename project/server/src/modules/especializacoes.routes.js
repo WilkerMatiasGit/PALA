@@ -8,6 +8,7 @@ import {
   toEstagioGet,
 } from '../utils/dto.js';
 import { alterarComPermissao } from '../utils/actividade_permissao.js';
+import { inteiroOpcional } from '../utils/numeros.js';
 
 const ACT_ROLES = ['admin', 'professor', 'coordenador_dlab', 'supervisor', 'chefe_departamento'];
 
@@ -25,8 +26,13 @@ aulas.post('/', rbac(...ACT_ROLES), async (req, res, next) => {
       return res.status(400).json({ message: 'actividade_id e curso_disciplina_id são obrigatórios' });
     }
     const normTurno = turno === 'manha' || turno === 'tarde' ? turno : null;
-    const normNumero = Number.isInteger(numero_turma) ? numero_turma : Number(numero_turma);
-    const finalNumero = Number.isInteger(normNumero) && normNumero > 0 ? normNumero : null;
+    // `numero_turma` é opcional, mas quando indicado tem de ser inteiro >= 1
+    // (antes, 0/negativo era convertido em `null` em silêncio).
+    const normNumero = inteiroOpcional(numero_turma);
+    if (normNumero === null) {
+      return res.status(400).json({ message: 'O número da turma tem de ser um inteiro maior ou igual a 1.' });
+    }
+    const finalNumero = normNumero === undefined ? null : normNumero;
     const act = await prisma.actividade.findUnique({ where: { id: Number(actividade_id) } });
     if (!act || !act.activo) return res.status(404).json({ message: 'Atividade não encontrada' });
     // Regras 1 (estado) + 2 (autoria).

@@ -78,7 +78,39 @@ export interface RegrasDia {
   fimDeSemana?: boolean;
   /** Valor de `configuracoes_gerais.permitir_fim_semana` (null = sem regra). */
   permitirFimSemana?: boolean | null;
+  /** Aplica a regra de feriados a este campo (só o dia das sessões). */
+  feriados?: boolean;
+  /** Lista de feriados activos (`data` 'aaaa-mm-dd', `tipo`). */
+  feriadosLista?: Array<{ data: string; nome?: string; tipo?: string }>;
+  /** Valor de `configuracoes_gerais.permitir_feriados` (null = sem regra). */
+  permitirFeriados?: boolean | null;
 }
+
+/**
+ * Um feriado cobre um dia? `tipo = 'feriado'` repete-se todos os anos (mesmo
+ * dia/mês); os restantes tipos são datas únicas. Espelha `feriadoCobre` do
+ * backend (`server/src/utils/validarSessao.js`).
+ */
+export const feriadoCobre = (
+  feriado: { data: string; tipo?: string } | undefined,
+  iso: string
+): boolean => {
+  if (!feriado || !feriado.data) return false;
+  const data = toDateInput(feriado.data);
+  if (!data) return false;
+  if (feriado.tipo === 'feriado') {
+    const [, fm, fd] = data.split('-');
+    const [, m, d] = iso.split('-');
+    return fm === m && fd === d;
+  }
+  return data === iso;
+};
+
+/** true => o dia 'aaaa-mm-dd' cai num feriado activo da lista. */
+export const ehFeriado = (
+  iso: string,
+  feriados: Array<{ data: string; nome?: string; tipo?: string }> = []
+): boolean => feriados.some((f) => feriadoCobre(f, iso));
 
 /** true => o dia está desactivado (não clicável) no calendário. */
 export const diaDesactivado = (date: Date, regras: RegrasDia = {}): boolean => {
@@ -92,6 +124,17 @@ export const diaDesactivado = (date: Date, regras: RegrasDia = {}): boolean => {
   // (3) fim de semana quando a regra está desligada (aplica-se ao DIA DA SESSÃO;
   //     a data de início/fim do projecto/estágio PODE cair a sábado ou domingo)
   if (regras.fimDeSemana && regras.permitirFimSemana === false && ehFimDeSemana(iso)) {
+    return true;
+  }
+  // (4) feriado quando a regra está desligada (só o DIA DA SESSÃO, como o fim de
+  //     semana; o fim de semana tem precedência na mensagem do backend)
+  if (
+    regras.feriados &&
+    regras.permitirFeriados === false &&
+    regras.feriadosLista &&
+    regras.feriadosLista.length > 0 &&
+    ehFeriado(iso, regras.feriadosLista)
+  ) {
     return true;
   }
   // PONTO DE EXTENSÃO — acrescentar aqui novas regras de desactivação.

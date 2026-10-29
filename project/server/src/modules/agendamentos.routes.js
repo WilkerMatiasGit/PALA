@@ -4,7 +4,7 @@ import { authRequired, rbac } from '../middleware/auth.js';
 import { recomputeMaterial } from '../utils/stock.js';
 import { toAgendamentoGet } from '../utils/dto.js';
 import { recalcularEstadoActividade } from '../utils/actividade_estado.js';
-import { validarSessao, periodoDaActividade } from '../utils/validarSessao.js';
+import { periodoDaActividade, validarSessao, obterFeriadosParaValidacao } from '../utils/validarSessao.js';
 import { obterConfiguracaoGeral } from '../utils/configuracao.js';
 import {
   podeAlterarActividade,
@@ -179,7 +179,8 @@ router.post('/', rbac(...MOVE_ROLES), async (req, res, next) => {
     try {
       const periodo = await periodoDaActividade(act);
       const configuracao = await obterConfiguracaoGeral();
-      await validarSessao({ tipo: act.tipo, laboratorio_id: act.laboratorio_id, num_participantes: participantes, hora_inicio, hora_fim }, { periodo, configuracao });
+      const feriados = await obterFeriadosParaValidacao();
+      await validarSessao({ tipo: act.tipo, laboratorio_id: act.laboratorio_id, num_participantes: participantes, hora_inicio, hora_fim }, { periodo, configuracao, feriados });
     } catch (e) {
       if (e.status) return res.status(e.status).json({ message: e.message });
       throw e;
@@ -315,7 +316,8 @@ router.put('/:id', rbac(...MOVE_ROLES), async (req, res, next) => {
     try {
       const periodo = await periodoDaActividade(act);
       const configuracao = await obterConfiguracaoGeral();
-      await validarSessao(efectivo, { periodo, configuracao });
+      const feriados = await obterFeriadosParaValidacao();
+      await validarSessao(efectivo, { periodo, configuracao, feriados });
     } catch (e) {
       if (e.status) return res.status(e.status).json({ message: e.message });
       throw e;

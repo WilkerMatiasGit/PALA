@@ -29,8 +29,8 @@ import type { AgendamentoGet } from '@/types/agendamento.types';
 import type { EstudanteGet } from '@/types/estudantes.types';
 import type { ActividadeTipo } from '@/services/enums';
 import { useAuth } from '@/context/AuthContext';
-import { semestreToAno, semestreNoAno } from '@/utils/constants';
-import { DIAS_SEMANA, diaDesactivado, diaSemana, fmtBR, hojeISO, paraISO, toDateInput } from '@/utils/dateInput';
+import { FERIADO_TIPO_LABEL, semestreToAno, semestreNoAno } from '@/utils/constants';
+import { DIAS_SEMANA, diaDesactivado, diaSemana, ehFeriado, fmtBR, hojeISO, paraISO, toDateInput } from '@/utils/dateInput';
 import { DateField } from '@/components/ui/date-field';
 import { Plus, Trash2, ChevronRight, ChevronLeft, ClipboardList } from 'lucide-react';
 
@@ -80,6 +80,8 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
   // Configurações gerais (só leitura). null = ainda não carregado ou leitura falhou;
   // nesse caso NÃO bloqueamos o utilizador (o backend valida de qualquer forma).
   const [permitirFimSemana, setPermitirFimSemana] = useState<boolean | null>(null);
+  const [permitirFeriados, setPermitirFeriados] = useState<boolean | null>(null);
+  const [feriadosLista, setFeriadosLista] = useState<Array<{ data: string; nome?: string; tipo?: string }>>([]);
   const [configGeralErro, setConfigGeralErro] = useState('');
 
   // Step 1: base
@@ -126,13 +128,6 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
     laboratoriosService.list().then(setLabs).catch(() => setLabs([]));
     cursosService.listCursoDisciplinas().then(setCursoDisciplinas).catch(() => setCursoDisciplinas([]));
     cursosService.listEstudantes().then(setEstudantes).catch(() => setEstudantes([]));
-    configuracaoService.getLimites().then(setLimites).catch(() => setLimites([]));
-    // Configurações gerais (todos os perfis): o professor precisa de saber se os fins
-    // de semana estão bloqueados para validar o formulário. Se falhar, mostra o erro
-    // real e não bloqueia (o backend valida de qualquer forma).
-    configuracaoService.getGeral()
-      .then((c) => { setPermitirFimSemana(c.permitir_fim_semana); setConfigGeralErro(''); })
-      .catch((err) => { setPermitirFimSemana(null); setConfigGeralErro(apiErrorMessage(err)); });
   }, []);
 
   // Lista de utilizadores (para escolher o responsável) — só o Admin tem acesso a
@@ -165,6 +160,24 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
   // controlado pelo componente pai (`setModalOpen(true)`). Daí o `useEffect` sobre `open`.
   useEffect(() => {
     if (!open) return;
+
+    // Regras de agendamento (limites + config geral) e feriados: relidos a cada
+    // abertura — podem ter sido alterados em /configuracao entretanto. Se a
+    // leitura falhar, avisa e NÃO bloqueia (o backend valida sempre).
+    configuracaoService.getLimites().then(setLimites).catch(() => setLimites([]));
+    configuracaoService.getGeral()
+      .then((c) => {
+        setPermitirFimSemana(c.permitir_fim_semana);
+        setPermitirFeriados(c.permitir_feriados);
+        setConfigGeralErro('');
+      })
+      .catch((err) => {
+        setPermitirFimSemana(null);
+        setPermitirFeriados(null);
+        setConfigGeralErro(apiErrorMessage(err));
+      });
+    configuracaoService.listFeriados().then(setFeriadosLista).catch(() => setFeriadosLista([]));
+
     setStep(1);
     setNome(''); setLabId(''); setTipo('aula');
     setObservacoes(''); setResponsavelId('');
@@ -250,7 +263,13 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
     if (s === 2) {
       // Só o Admin escolhe o responsável; nos restantes perfis é o próprio utilizador.
       if (isAdmin && !responsavelId) return 'Selecione o responsável da atividade';
-      if (tipo === 'aula') return !cursoDisciplinaId ? 'Selecione a disciplina' : null;
+      if (tipo === 'aula') {
+        if (!cursoDisciplinaId) return 'Selecione a disciplina';
+        if (numeroTurma && (!Number.isInteger(Number(numeroTurma)) || Number(numeroTurma) < 1)) {
+          return 'O número da turma tem de ser 1 ou superior';
+        }
+        return null;
+      }
       if (tipo === 'visita') {
         if (!nomeVisitante) return 'Preencha o nome do visitante';
         if (!telefone) return 'Preencha o telefone';
@@ -283,6 +302,8 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
         if (pe) return pe;
         const fs = fimSemanaError(a.data);
         if (fs) return fs;
+        const fe = feriadoError(a.data);
+        if (fe) return fe;
         if (a.hora_fim <= a.hora_inicio) return 'A hora de fim deve ser posterior à hora de início';
         if (!Number.isInteger(Number(a.num_participantes)) || Number(a.num_participantes) < 1) {
           return 'Indique o número de participantes (mínimo 1) em cada sessão';
@@ -347,6 +368,9 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
       max: periodEnd || undefined,
       fimDeSemana: true,
       permitirFimSemana,
+      feriados: true,
+      feriadosLista,
+      permitirFeriados,
     });
 
   const rangeError = (participantes: number): string | null => {
@@ -382,14 +406,31 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
     return null;
   };
 
-  // Erros de data de uma sessão (passado / fora do período / fim de semana):
+  // Erro de feriado: só quando a configuração está carregada e desactivada
+  // (`permitir_feriados === false`). O fim de semana só tem precedência quando
+  // está BLOQUEADO — se for permitido, um sábado/domingo que seja feriado
+  // continua a ser inválido (antes era ignorado no front e só o backend travava).
+  // Se a leitura falhou (null), não bloqueia.
+  const feriadoError = (data: string): string | null => {
+    if (permitirFeriados !== false || !data) return null;
+    if (permitirFimSemana === false) {
+      const dow = diaSemana(data);
+      if (dow === 0 || dow === 6) return null;
+    }
+    const feriado = feriadosLista.find((f) => ehFeriado(data, [f]));
+    if (!feriado) return null;
+    const rotulo = FERIADO_TIPO_LABEL[feriado.tipo ?? 'feriado'] ?? feriado.tipo ?? 'feriado';
+    return `Não é permitido agendar nesta data: ${fmtBR(data)} é ${rotulo} (${feriado.nome ?? ''}).`;
+  };
+
+  // Erros de data de uma sessão (passado / fora do período / fim de semana / feriado):
   // alimentam o texto do bloco e marcam o campo do dia como inválido.
   const dataError = (data: string): string | null => {
     if (!data) return null; // ainda não escolheu o dia
     if (data < hojeISO()) return 'O dia não pode estar no passado';
     const pe = periodoError(data);
     if (pe) return pe;
-    return fimSemanaError(data);
+    return fimSemanaError(data) ?? feriadoError(data);
   };
 
   // Erro específico de um bloco de agendamento para validação em tempo real
@@ -428,7 +469,7 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
 
       const detalhes =
         tipo === 'aula'
-          ? { curso_disciplina_id: Number(cursoDisciplinaId), tema, turno, numero_turma: Number(numeroTurma) }
+          ? { curso_disciplina_id: Number(cursoDisciplinaId), tema, turno, numero_turma: numeroTurma.trim() === '' ? null : Number(numeroTurma) }
           : tipo === 'visita'
             ? { nome_visitante: nomeVisitante, telefone, email: emailVisitante, ...(instituicao ? { instituicao } : {}) }
             : tipo === 'projecto'
@@ -612,7 +653,7 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="num-turma">Nº da turma</Label>
-                    <NumberInput id="num-turma" value={numeroTurma} onValueChange={setNumeroTurma} placeholder="Ex: 1" />
+                    <NumberInput id="num-turma" value={numeroTurma} onValueChange={setNumeroTurma} placeholder="Ex: 1" min={1} allowDecimal={false} />
                   </div>
                 </div>
                 {turmaPreview && (
@@ -720,6 +761,11 @@ export function ActividadeUpsertModal({ open, onOpenChange, actividade, onSaved 
             {permitirFimSemana === false && (
               <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-800">
                 Fins de semana não permitidos.
+              </p>
+            )}
+            {permitirFeriados === false && feriadosLista.length > 0 && (
+              <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-800">
+                Feriados não permitidos.
               </p>
             )}
             {configGeralErro && (

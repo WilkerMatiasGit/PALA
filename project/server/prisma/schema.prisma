@@ -84,6 +84,13 @@ enum TecnicoTipo {
   assistente
 }
 
+enum FeriadoTipo {
+  feriado
+  feriado_movel
+  ponte
+  tolerancia
+}
+
 enum TurnoTipo {
   manha
   tarde
@@ -382,22 +389,23 @@ model LimiteParticipantes {
   activo         Boolean        @default(true)
 
   @@map("limites_participantes")
-  }
+}
 
-  // Configurações gerais do sistema (linha única). Outras colunas serão
-  // acrescentadas em pedidos seguintes (feriados, antecedência mínima, prazo de confirmação).
-  // `activo` é o soft delete (BaseEntity); o interruptor é `permitir_fim_semana`.
-  model ConfiguracaoGeral {
-    id                   Int      @id @default(autoincrement())
-    permitir_fim_semana  Boolean  @default(false)
-    criado_em            DateTime @default(now())
-    actualizado_em       DateTime @updatedAt
-    activo               Boolean  @default(true)
+// Configurações gerais do sistema (linha única). Outras colunas serão
+// acrescentadas em pedidos seguintes (antecedência mínima, prazo de confirmação).
+// `activo` é o soft delete (BaseEntity); os interruptores são `permitir_fim_semana` e `permitir_feriados`.
+model ConfiguracaoGeral {
+  id                    Int      @id @default(autoincrement())
+  permitir_fim_semana   Boolean  @default(false)
+  permitir_feriados     Boolean  @default(false)
+  criado_em             DateTime @default(now())
+  actualizado_em        DateTime @updatedAt
+  activo                Boolean  @default(true)
 
-    @@map("configuracoes_gerais")
-  }
+  @@map("configuracoes_gerais")
+}
 
-  model Agendamento {
+model Agendamento {
   id                   Int              @id @default(autoincrement())
   actividade_id        Int
   num_participantes    Int              @default(1)
@@ -506,4 +514,17 @@ model Relatorio {
   criadoPor   Utilizador  @relation(fields: [criado_por], references: [id])
 
   @@map("relatorios")
+}
+
+model Feriado {
+  id             Int         @id @default(autoincrement())
+  nome           String
+  data           DateTime    @db.Date
+  tipo           FeriadoTipo
+  criado_em      DateTime    @default(now())
+  actualizado_em DateTime    @updatedAt
+  activo         Boolean     @default(true)
+
+  @@unique([data])
+  @@map("feriados")
 }

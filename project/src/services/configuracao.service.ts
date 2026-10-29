@@ -1,5 +1,13 @@
 import { api, apiErrorMessage } from './api';
-import type { FluxoEtapaGet, FluxoUpdate, LimiteParticipantesGet, ConfiguracaoGeralGet } from '@/types/configuracao.types';
+import type {
+  FluxoEtapaGet,
+  FluxoUpdate,
+  LimiteParticipantesGet,
+  ConfiguracaoGeralGet,
+  FeriadoGet,
+  FeriadoUpsert,
+  FeriadoAfectadoResposta,
+} from '@/types/configuracao.types';
 
 export const configuracaoService = {
   // GET /configuracao/fluxo — etapas ativas por ordem (A,C,S)
@@ -63,10 +71,49 @@ export const configuracaoService = {
   },
 
   // PUT /configuracao/geral — guardar as configurações gerais (A)
-  async updateGeral(data: ConfiguracaoGeralGet): Promise<ConfiguracaoGeralGet> {
+  async updateGeral(data: Partial<ConfiguracaoGeralGet>): Promise<ConfiguracaoGeralGet> {
     try {
       const { data: updated } = await api.put<ConfiguracaoGeralGet>('/configuracao/geral', data);
       return updated;
+    } catch (err) {
+      throw new Error(apiErrorMessage(err));
+    }
+  },
+
+  // GET /configuracao/feriados — lista de feriados activos (qualquer autenticado)
+  async listFeriados(): Promise<FeriadoGet[]> {
+    try {
+      const { data } = await api.get<FeriadoGet[]>('/configuracao/feriados');
+      return data;
+    } catch (err) {
+      throw new Error(apiErrorMessage(err));
+    }
+  },
+
+  // POST /configuracao/feriados — criar feriado (A)
+  async createFeriado(payload: FeriadoUpsert): Promise<FeriadoAfectadoResposta> {
+    try {
+      const { data } = await api.post<FeriadoAfectadoResposta>('/configuracao/feriados', payload);
+      return data;
+    } catch (err) {
+      throw new Error(apiErrorMessage(err));
+    }
+  },
+
+  // PUT /configuracao/feriados/:id — actualizar feriado (A)
+  async updateFeriado(id: number, payload: Partial<FeriadoUpsert>): Promise<FeriadoAfectadoResposta> {
+    try {
+      const { data } = await api.put<FeriadoAfectadoResposta>(`/configuracao/feriados/${id}`, payload);
+      return data;
+    } catch (err) {
+      throw new Error(apiErrorMessage(err));
+    }
+  },
+
+  // DELETE /configuracao/feriados/:id — remover feriado (A)
+  async removeFeriado(id: number): Promise<void> {
+    try {
+      await api.delete(`/configuracao/feriados/${id}`);
     } catch (err) {
       throw new Error(apiErrorMessage(err));
     }

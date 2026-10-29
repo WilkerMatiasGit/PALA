@@ -37,4 +37,28 @@ export interface LimitesUpdate {
 
 export interface ConfiguracaoGeralGet {
   permitir_fim_semana: boolean;
+  permitir_feriados: boolean;
+}
+
+export type FeriadoTipo = 'feriado' | 'feriado_movel' | 'ponte' | 'tolerancia';
+
+export interface FeriadoGet {
+  id: number;
+  nome: string;
+  data: string;
+  tipo: FeriadoTipo;
+  activo: boolean;
+  criado_em?: string;
+  actualizado_em?: string;
+}
+
+export interface FeriadoUpsert {
+  nome: string;
+  data: string;
+  tipo: FeriadoTipo;
+}
+
+export interface FeriadoAfectadoResposta extends FeriadoGet {
+  sessoes_afectadas_count?: number;
+  actividades_afectadas?: Array<{ id: number; nome: string; sessoes?: Array<{ agendamento_id: number; data: string }> }>;
 }

@@ -48,7 +48,30 @@ export function toLimiteGet(l) {
 
 export function toConfiguracaoGeralGet(c) {
   return {
-    permitir_fim_semana: c.permitir_fim_semana,
+    permitir_fim_semana: Boolean(c?.permitir_fim_semana),
+    permitir_feriados: Boolean(c?.permitir_feriados),
+  };
+}
+
+export function toFeriadoGet(r) {
+  if (!r) return null;
+  let data = r.data;
+  if (data instanceof Date) {
+    const y = data.getFullYear();
+    const m = String(data.getMonth() + 1).padStart(2, '0');
+    const d = String(data.getDate()).padStart(2, '0');
+    data = `${y}-${m}-${d}`;
+  } else if (typeof data === 'string') {
+    data = data.slice(0, 10);
+  }
+  return {
+    id: r.id,
+    nome: r.nome,
+    data,
+    tipo: r.tipo,
+    activo: r.activo !== false,
+    criado_em: r.criado_em,
+    actualizado_em: r.actualizado_em,
   };
 }
 
@@ -150,7 +173,9 @@ export function toActividadeGet(a, flags) {
 export function toAulaGet(aula) {
   const cd = aula.curso_disciplina;
   const abreviacao = cd?.curso?.abreviacao ?? '';
-  const turma = aula.turno && aula.numero_turma != null
+  // `numero_turma` é opcional; só entra na turma derivada quando é um inteiro
+  // positivo (dados legados com 0/negativo não devem gerar "_M0"/"_M-1").
+  const turma = aula.turno && Number.isInteger(aula.numero_turma) && aula.numero_turma > 0
     ? `${abreviacao}_${aula.turno === 'manha' ? 'M' : 'T'}${aula.numero_turma}`
     : '';
   return {
